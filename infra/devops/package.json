@@ -1,0 +1,8 @@
+{
+  "name": "@split-bill/devops",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node -e \"console.log('devops workspace placeholder')\""
+  }
+}

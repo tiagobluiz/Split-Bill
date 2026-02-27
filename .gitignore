@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+
+apps/**/dist/
+apps/**/build/
+infra/**/dist/
+packages/**/dist/
