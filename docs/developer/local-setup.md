@@ -19,3 +19,14 @@
 Expected endpoints:
 - Frontend: `http://localhost:5173`
 - Backend health: `http://localhost:8080/health`
+
+## CI Parity
+
+The PR quality gate runs the same local validation commands:
+
+1. `npm run bootstrap`
+2. `npm run lint`
+3. `npm run format:check`
+4. `npm test`
+
+See `docs/developer/ci-quality-gates.md` for workflow and required check details.
