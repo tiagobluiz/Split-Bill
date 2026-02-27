@@ -2,8 +2,8 @@
 
 ## Summary
 Deliver a modern bill-splitting web app with:
+- Guest stateless one-off split (no persistence).
 - Registered users with dashboard and persistent events.
-- Authenticated access required for event data and history.
 - Event collaboration via signed invite links and "Join as Person".
 - Expense/Income entries with even and uneven splits.
 - Event balances and settlement with per-event selectable algorithm (default `MIN_TRANSFER`, extensible).
@@ -16,7 +16,7 @@ Deliver a modern bill-splitting web app with:
 - Money: decimal fixed-scale representation.
 - Currency: event base currency; entry currency allowed; conversion uses entry-date FX snapshot.
 - Recompute: immediate on entry create/update/delete.
-- Guest split is deferred to post-v1 backlog.
+- Guest mode: strict one-off only.
 - Auth: email/password; verification required before create/join event.
 - Collaboration: owner invites via signed token; joiner maps account to existing event person.
 - Permissions: full edit for all collaborators in v1.
@@ -51,6 +51,7 @@ Deliver a modern bill-splitting web app with:
 - `GET /events/{eventId}/analytics/daily-spend`
 - `GET /events/{eventId}/analytics/category-spend`
 - `POST /uploads/presign`
+- `POST /guest/split/calculate`
 
 Key DTOs:
 - `MoneyDto { amount: string, currency: string }`
@@ -156,7 +157,7 @@ Key DTOs:
 - Currency: same as base, foreign with FX.
 - Rounding: exact, fractional residual.
 - Mutation: create, update, delete entry.
-- Auth state: registered verified, registered unverified blocked.
+- Auth state: guest, registered verified, registered unverified blocked.
 - Collaboration: owner, collaborator, join-as-person mapping.
 - Invite token: valid, expired, revoked.
 - Analytics window: single day, range, full event.
@@ -176,12 +177,13 @@ CI gates:
 - Developer docs: setup, local run, testing strategy, deployment runbook.
 - GitHub Wiki user guide with screenshots:
 1. App overview and concepts.
-2. Register/login/verify.
-3. Create event/add people.
-4. Add entries and split modes.
-5. Balances and settlements.
-6. Analytics filters and interpretation.
-7. Invite/join-as-person collaboration.
+2. Guest one-off split.
+3. Register/login/verify.
+4. Create event/add people.
+5. Add entries and split modes.
+6. Balances and settlements.
+7. Analytics filters and interpretation.
+8. Invite/join-as-person collaboration.
 - Screenshot generation approach: seeded demo dataset + scripted capture checklist.
 
 ## Flat GitHub Issues Backlog (Plan Output)
@@ -210,16 +212,16 @@ CI gates:
 | SB-020 | Frontend balances and settlement UI | Net balances, owes/owed views, algorithm selection | SB-019, SB-011 | frontend | M3 |
 | SB-021 | Frontend collaboration join flow | Invite creation/use, join-as-person mapping | SB-017, SB-012 | frontend | M3 |
 | SB-022 | Frontend analytics pages | Daily/category charts, filters, timezone display behavior | SB-020, SB-015 | frontend, analytics | M3 |
+| SB-023 | Guest one-off split feature | Stateless calculator and dedicated endpoint integration | SB-016, SB-009 | frontend, backend | M2 |
 | SB-024 | BE unit test suite from matrix | Domain/service/unit tests across all matrix axes | SB-009, SB-013 | backend, tests | M3 |
 | SB-025 | BE controller integration tests (required) | End-to-end controller tests for every endpoint and error path | SB-006, SB-015 | backend, tests | M3 |
 | SB-026 | FE component and integration tests | All FE components/routes and matrix-driven UI behavior | SB-017, SB-022 | frontend, tests | M3 |
-| SB-027 | FE end-to-end journey tests | Auth/event/collab/analytics critical flows | SB-021, SB-022 | frontend, tests | M4 |
+| SB-027 | FE end-to-end journey tests | Guest/auth/event/collab/analytics critical flows | SB-021, SB-022, SB-023 | frontend, tests | M4 |
 | SB-028 | Generated documentation pipeline | Publish API docs, coverage reports, test reports | SB-002, SB-003 | docs, infra | M2 |
 | SB-029 | ADR and BDR baseline docs | Templates + initial records for architecture/business decisions | SB-003 | docs | M1 |
 | SB-030 | GitHub Wiki user guide with screenshots | End-user walkthrough content and screenshots | SB-022, SB-027 | docs, frontend | M4 |
 | SB-031 | Security hardening and abuse controls | Rate limits, token hardening, upload safety, audit log | SB-012, SB-014 | backend, security | M4 |
 | SB-032 | Release readiness and production runbook | Staging validation, rollback, operational checklist | SB-025, SB-027, SB-030, SB-031 | release, infra, docs | M4 |
-| SB-033 | Guest one-off split feature (Deferred post-v1) | Stateless calculator and dedicated endpoint integration | none | frontend, backend, post-v1 | no milestone |
 
 ## Definition of Done (All Issues)
 - Implementation merged.
