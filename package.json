@@ -1,0 +1,22 @@
+{
+  "name": "split-bill",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Split-Bill monorepo bootstrap",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infra/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "bootstrap": "node tools/standards/bootstrap.mjs",
+    "dev": "node tools/standards/dev.mjs",
+    "lint": "node tools/standards/lint.mjs",
+    "format": "node tools/standards/format.mjs --write",
+    "format:check": "node tools/standards/format.mjs --check",
+    "test": "node tools/standards/test.mjs"
+  }
+}
