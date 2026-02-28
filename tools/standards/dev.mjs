@@ -6,6 +6,7 @@ const commands = [
 ];
 
 const children = [];
+let isShuttingDown = false;
 
 for (const cmd of commands) {
   const child = spawn("npm", cmd.args, {
@@ -26,6 +27,11 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 function shutdown(code) {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
   for (const child of children) {
     if (!child.killed) {
       child.kill("SIGTERM");

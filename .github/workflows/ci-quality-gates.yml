@@ -26,11 +26,11 @@ jobs:
       standards: ${{ steps.filter.outputs.standards }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Detect changed scopes
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         with:
           filters: |
             backend:
@@ -57,28 +57,45 @@ jobs:
     needs: scope-detection
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
 
+      - name: Evaluate scoped execution
+        id: run-checks
+        run: |
+          should_run="${{ needs.scope-detection.outputs.backend == 'true' || needs.scope-detection.outputs.frontend == 'true' || needs.scope-detection.outputs.contracts == 'true' || needs.scope-detection.outputs.infra == 'true' || needs.scope-detection.outputs.standards == 'true' }}"
+          echo "should_run=${should_run}" >> "$GITHUB_OUTPUT"
+
       - name: Install dependencies
+        if: steps.run-checks.outputs.should_run == 'true'
         run: npm ci
 
       - name: Bootstrap checks
+        if: steps.run-checks.outputs.should_run == 'true'
         run: npm run bootstrap
 
       - name: Lint checks
+        if: steps.run-checks.outputs.should_run == 'true'
         run: npm run lint
 
       - name: Formatting checks
+        if: steps.run-checks.outputs.should_run == 'true'
         run: npm run format:check
 
       - name: Test checks
+        if: steps.run-checks.outputs.should_run == 'true'
         run: npm test
+
+      - name: Skip checks for docs-only changes
+        if: steps.run-checks.outputs.should_run != 'true'
+        run: |
+          echo "Only documentation changes detected in this PR scope."
+          echo "Skipping bootstrap/lint/format/test quality steps."
 
       - name: Publish CI scope summary
         run: |

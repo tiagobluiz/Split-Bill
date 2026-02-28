@@ -1,5 +1,4 @@
-import { statSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   REQUIRED_DIRS,
   collectFiles,
@@ -30,7 +29,7 @@ for (const file of files) {
   const content = readText(file);
   const normalized = normalizeText(content);
   if (content !== normalized) {
-    const shortName = file.replace(`${root}\\`, "");
+    const shortName = relative(root, file);
     errors.push(`Formatting drift in ${shortName}. Run: npm run format`);
   }
 }
@@ -39,18 +38,6 @@ const rootPackage = JSON.parse(readText(resolve(root, "package.json")));
 for (const scriptName of ["bootstrap", "dev", "lint", "format", "format:check", "test"]) {
   if (!rootPackage.scripts || !rootPackage.scripts[scriptName]) {
     errors.push(`Missing npm script: ${scriptName}`);
-  }
-}
-
-for (const app of ["apps/backend", "apps/frontend", "packages/contracts", "infra"]) {
-  const appPath = resolve(root, app);
-  try {
-    const info = statSync(appPath);
-    if (!info.isDirectory()) {
-      errors.push(`Expected directory but found file: ${app}`);
-    }
-  } catch {
-    errors.push(`Missing project path: ${app}`);
   }
 }
 

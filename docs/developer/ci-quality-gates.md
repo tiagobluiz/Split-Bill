@@ -10,7 +10,10 @@
 
 ## What Runs
 
-For pull requests and pushes to `main`, CI executes:
+For pull requests and pushes to `main`, CI detects changed scopes first.
+
+If code-related scopes changed (`backend`, `frontend`, `contracts`, `infra`,
+`standards`), CI executes:
 
 1. `npm ci`
 2. `npm run bootstrap`
@@ -18,9 +21,12 @@ For pull requests and pushes to `main`, CI executes:
 4. `npm run format:check`
 5. `npm test`
 
-The workflow also detects changed scopes (`backend`, `frontend`, `contracts`,
-`infra`, `docs`, `standards`) and publishes them to the run summary so reviewers
-can quickly validate impact.
+If only `docs` changed, the workflow records a docs-only skip message while
+still reporting a successful `quality-gates` status check.
+
+Changed scopes (`backend`, `frontend`, `contracts`, `infra`, `docs`,
+`standards`) are published to the run summary so reviewers can quickly validate
+impact.
 
 ## Branch Protection
 

@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { basename, extname, join } from "node:path";
 
 export const REQUIRED_DIRS = [
   "apps/backend",
@@ -71,8 +71,11 @@ export function isTextFile(filePath) {
     return true;
   }
 
-  return ["LICENSE", "README"].some((prefix) =>
-    filePath.toUpperCase().includes(prefix)
+  const fileNameUpper = basename(filePath).toUpperCase();
+  return (
+    fileNameUpper === "LICENSE" ||
+    fileNameUpper === "README" ||
+    fileNameUpper.startsWith("README.")
   );
 }
 
