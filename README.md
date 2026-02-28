@@ -34,6 +34,12 @@ This starts both local app workspaces:
 - `npm run format`: applies whitespace/newline formatting to text files.
 - `npm test`: runs bootstrap verification tests.
 
+## CI
+
+- Pull requests run `.github/workflows/ci-quality-gates.yml`.
+- Required status check for protected `main`: `quality-gates`.
+- CI details: `docs/developer/ci-quality-gates.md`.
+
 ## Notes
 
 - `.editorconfig` and `.gitattributes` define line ending and spacing policies.

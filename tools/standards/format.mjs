@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { collectFiles, isTextFile, normalizeText, readText, writeText } from "./shared.mjs";
 
 const root = resolve(process.cwd());
@@ -22,7 +22,7 @@ for (const file of files) {
 if (mode === "check" && dirty.length > 0) {
   console.error("Formatting check failed. Run: npm run format");
   for (const file of dirty) {
-    console.error(`- ${file.replace(`${root}\\`, "")}`);
+    console.error(`- ${relative(root, file)}`);
   }
   process.exit(1);
 }

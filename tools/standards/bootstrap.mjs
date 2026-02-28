@@ -6,11 +6,11 @@ const errors = [];
 
 if (typeof process.versions.node !== "string") {
   errors.push("Node.js runtime is required.");
-}
-
-const major = Number(process.versions.node.split(".")[0] ?? 0);
-if (major < 20) {
-  errors.push(`Node.js 20+ required. Current: ${process.versions.node}`);
+} else {
+  const major = Number(process.versions.node.split(".")[0] ?? 0);
+  if (major < 20) {
+    errors.push(`Node.js 20+ required. Current: ${process.versions.node}`);
+  }
 }
 
 ensureFileExists(resolve(root, "package.json"), errors, "Missing root package.json.");

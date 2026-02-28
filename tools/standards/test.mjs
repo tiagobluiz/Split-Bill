@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { REQUIRED_DIRS, normalizeText, readText } from "./shared.mjs";
 
@@ -13,6 +14,7 @@ assert.equal(
 for (const dir of REQUIRED_DIRS) {
   const readmePath = resolve(root, dir.split("/")[0], dir.split("/")[1] ?? "", "README.md");
   if (dir.startsWith("apps/") || dir.startsWith("packages/")) {
+    assert.ok(existsSync(readmePath), `${dir} must include a README.md`);
     const content = readText(readmePath);
     assert.ok(content.length > 0, `${dir} must include a README.md`);
   }
