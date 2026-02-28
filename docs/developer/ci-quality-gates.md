@@ -18,8 +18,9 @@ If code-related scopes changed (`backend`, `frontend`, `contracts`, `infra`,
 1. `npm ci`
 2. `npm run bootstrap`
 3. `npm run lint`
-4. `npm run format:check`
-5. `npm test`
+4. `npm run contracts:check`
+5. `npm run format:check`
+6. `npm test`
 
 If only `docs` changed, the workflow records a docs-only skip message while
 still reporting a successful `quality-gates` status check.

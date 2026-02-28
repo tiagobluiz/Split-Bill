@@ -35,7 +35,15 @@ for (const file of files) {
 }
 
 const rootPackage = JSON.parse(readText(resolve(root, "package.json")));
-for (const scriptName of ["bootstrap", "dev", "lint", "format", "format:check", "test"]) {
+for (const scriptName of [
+  "bootstrap",
+  "dev",
+  "lint",
+  "contracts:check",
+  "format",
+  "format:check",
+  "test"
+]) {
   if (!rootPackage.scripts || !rootPackage.scripts[scriptName]) {
     errors.push(`Missing npm script: ${scriptName}`);
   }
