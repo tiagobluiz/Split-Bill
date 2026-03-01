@@ -5,12 +5,14 @@ import java.util.UUID
 
 data class NetBalance(
     val personId: UUID,
+    /** Signed amount in event currency, scaled to MONEY_SCALE. */
     val amount: BigDecimal
 )
 
 data class SettlementTransfer(
     val fromPersonId: UUID,
     val toPersonId: UUID,
+    /** Transfer amount in event currency, scaled to MONEY_SCALE. */
     val amount: BigDecimal
 )
 

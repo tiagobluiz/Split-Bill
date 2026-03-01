@@ -27,7 +27,9 @@ class EventBalanceService(
     ): BalancesResponse {
         val event = requireEventMembership(eventId, accountId)
         val currency = requireNotNull(event.baseCurrency)
-        val algorithm = algorithmOverride ?: requireNotNull(event.defaultSettlementAlgorithm)
+        val algorithm = algorithmOverride
+            ?: event.defaultSettlementAlgorithm
+            ?: SettlementAlgorithm.MIN_TRANSFER
 
         val personIds = eventPersonRepository.findAllByEventIdOrderByCreatedAtAsc(eventId)
             .mapNotNull { it.id }
@@ -63,7 +65,6 @@ class EventBalanceService(
                 BalanceDto(
                     personId = personId,
                     netAmountInEventCurrency = (snapshotByPerson[personId] ?: BigDecimal.ZERO.scaleMoney())
-                        .scaleMoney()
                         .toPlainString(),
                     owes = owesByPerson[personId]
                         ?.sortedBy { it.counterpartyPersonId.toString() }
