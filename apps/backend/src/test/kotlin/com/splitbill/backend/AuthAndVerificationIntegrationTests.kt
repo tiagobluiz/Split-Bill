@@ -315,12 +315,15 @@ class AuthAndVerificationIntegrationTests(
     }
 
     private fun insertEventPerson(eventId: UUID, createdBy: UUID): UUID {
+        val now = Instant.now()
         val person = eventPersonRepository.save(
             EventPersonEntity(
                 id = UUID.randomUUID(),
                 eventId = eventId,
                 displayName = "Seeded Person",
-                createdByAccountId = createdBy
+                createdByAccountId = createdBy,
+                createdAt = now,
+                updatedAt = now
             )
         )
         return requireNotNull(person.id)

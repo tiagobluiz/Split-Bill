@@ -33,5 +33,8 @@ class EventEntity(
     var createdAt: Instant? = null,
 
     @Column(name = "updated_at", nullable = false)
-    var updatedAt: Instant? = null
+    var updatedAt: Instant? = null,
+
+    @Column(name = "archived_at")
+    var archivedAt: Instant? = null
 )
