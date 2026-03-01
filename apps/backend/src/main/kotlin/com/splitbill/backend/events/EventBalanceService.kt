@@ -1,6 +1,7 @@
 package com.splitbill.backend.events
 
 import com.splitbill.backend.events.settlement.domain.MinTransferSettlementStrategy
+import com.splitbill.backend.events.settlement.domain.MONEY_SCALE
 import com.splitbill.backend.events.settlement.domain.NetBalance
 import com.splitbill.backend.events.settlement.domain.PairwiseSettlementStrategy
 import com.splitbill.backend.events.settlement.domain.SettlementStrategy
@@ -88,5 +89,5 @@ class EventBalanceService(
         return event
     }
 
-    private fun BigDecimal.scaleMoney(): BigDecimal = setScale(4, RoundingMode.UNNECESSARY)
+    private fun BigDecimal.scaleMoney(): BigDecimal = setScale(MONEY_SCALE, RoundingMode.UNNECESSARY)
 }
