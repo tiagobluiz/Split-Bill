@@ -1,13 +1,8 @@
+import type { UpdatePreferencesRequest } from "@contracts/client";
 import { profileApi } from "./contractsClient";
 
-export type ProfilePreferencesInput = {
-  preferredCurrency: string;
-};
-
-export async function updatePreferences(input: ProfilePreferencesInput) {
+export async function updatePreferences(input: UpdatePreferencesRequest) {
   return profileApi.mePreferencesPatch({
-    updatePreferencesRequest: {
-      preferredCurrency: input.preferredCurrency
-    }
+    updatePreferencesRequest: input
   });
 }

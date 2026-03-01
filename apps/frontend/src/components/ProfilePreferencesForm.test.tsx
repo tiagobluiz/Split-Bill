@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ThemeProvider } from "@mui/material";
-import { vi, describe, expect, it, beforeEach } from "vitest";
+import { vi, describe, expect, it, beforeEach, afterEach } from "vitest";
 import { ProfilePreferencesForm } from "./ProfilePreferencesForm";
 import { appTheme } from "../theme";
 
@@ -16,6 +16,14 @@ describe("ProfilePreferencesForm", () => {
     updatePreferencesMock.mockReset();
     updatePreferencesMock.mockResolvedValue({});
   });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const changeCurrency = (currency: string) => {
+    fireEvent.mouseDown(screen.getByLabelText("Preferred currency"));
+    fireEvent.click(screen.getByRole("option", { name: currency }));
+  };
 
   it("submits selected currency using generated client service", async () => {
     render(
@@ -24,14 +32,44 @@ describe("ProfilePreferencesForm", () => {
       </ThemeProvider>
     );
 
-    fireEvent.mouseDown(screen.getByLabelText("Preferred currency"));
-    fireEvent.click(screen.getByRole("option", { name: "USD" }));
+    changeCurrency("USD");
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => {
       expect(updatePreferencesMock).toHaveBeenCalledWith({
         preferredCurrency: "USD"
       });
+    });
+  });
+
+  it("shows an error alert when preferences update fails", async () => {
+    updatePreferencesMock.mockRejectedValueOnce(new Error("Network error"));
+
+    render(
+      <ThemeProvider theme={appTheme}>
+        <ProfilePreferencesForm />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Failed to save preferences. Please try again.")).toBeInTheDocument();
+  });
+
+  it("clears success alert when user changes form value after submit", async () => {
+    render(
+      <ThemeProvider theme={appTheme}>
+        <ProfilePreferencesForm />
+      </ThemeProvider>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("Preferences updated successfully.")).toBeInTheDocument();
+
+    changeCurrency("BRL");
+
+    await waitFor(() => {
+      expect(screen.queryByText("Preferences updated successfully.")).not.toBeInTheDocument();
     });
   });
 });

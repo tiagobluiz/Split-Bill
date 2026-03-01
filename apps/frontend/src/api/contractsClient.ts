@@ -2,7 +2,7 @@ import {
   Configuration,
   EventsApi,
   ProfileApi
-} from "../../../../packages/contracts/generated/typescript-fetch/src";
+} from "@contracts/client";
 
 const apiBasePath = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 

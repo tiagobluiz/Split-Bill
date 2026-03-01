@@ -14,6 +14,7 @@ import {
   Typography
 } from "@mui/material";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { updatePreferences } from "../api/profileService";
@@ -29,12 +30,18 @@ const preferencesSchema = z.object({
 type PreferencesFormValues = z.infer<typeof preferencesSchema>;
 
 const currencyOptions = ["EUR", "USD", "BRL"];
+const cardStyles = {
+  boxShadow: 2,
+  border: 1,
+  borderColor: "divider"
+};
 
 export function ProfilePreferencesForm() {
   const {
     control,
     handleSubmit,
-    formState: { errors, isSubmitting, isSubmitSuccessful }
+    watch,
+    formState: { errors, isSubmitting }
   } = useForm<PreferencesFormValues>({
     resolver: zodResolver(preferencesSchema),
     defaultValues: {
@@ -42,13 +49,27 @@ export function ProfilePreferencesForm() {
     },
     mode: "onBlur"
   });
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const selectedCurrency = watch("preferredCurrency");
+
+  useEffect(() => {
+    setShowSuccess(false);
+  }, [selectedCurrency]);
 
   const onSubmit = async (values: PreferencesFormValues) => {
-    await updatePreferences(values);
+    setSubmitError(null);
+    try {
+      await updatePreferences(values);
+      setShowSuccess(true);
+    } catch {
+      setShowSuccess(false);
+      setSubmitError("Failed to save preferences. Please try again.");
+    }
   };
 
   return (
-    <Card sx={{ boxShadow: "0 4px 12px rgba(20,18,30,0.10)", border: "1px solid #E7D7CC" }}>
+    <Card sx={cardStyles}>
       <CardContent>
         <Stack spacing={3}>
           <Box>
@@ -59,11 +80,12 @@ export function ProfilePreferencesForm() {
               Update your default currency for new entries.
             </Typography>
           </Box>
-          {isSubmitSuccessful ? (
+          {showSuccess ? (
             <Alert icon={<CheckCircleOutlineRoundedIcon fontSize="inherit" />} severity="success">
               Preferences updated successfully.
             </Alert>
           ) : null}
+          {submitError ? <Alert severity="error">{submitError}</Alert> : null}
           <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate>
             <Stack spacing={2.5}>
               <Controller
