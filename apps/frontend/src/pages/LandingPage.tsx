@@ -65,9 +65,6 @@ export function LandingPage() {
                 <Button href="#how-it-works" color="inherit" sx={{ color: "text.secondary", minHeight: 40 }}>
                   How it works
                 </Button>
-                <Button href="#security" color="inherit" sx={{ color: "text.secondary", minHeight: 40 }}>
-                  Security
-                </Button>
                 <Button
                   component={RouterLink}
                   to="/sign-in"
@@ -138,7 +135,7 @@ export function LandingPage() {
           </Stack>
 
           <Stack spacing={2}>
-            <Typography id="security" textAlign="center" fontStyle="italic" color="text.secondary">
+            <Typography textAlign="center" fontStyle="italic" color="text.secondary">
               Used for trips, shared homes, and group dinners across Europe.
             </Typography>
             <Divider />
