@@ -59,8 +59,6 @@ paths:
     get: { tags: [Analytics], parameters: [ { $ref: '#/components/parameters/DateFrom' }, { $ref: '#/components/parameters/DateTo' }, { $ref: '#/components/parameters/PersonIds' } ], responses: { '200': { $ref: '#/components/responses/CategorySpend' }, '400': { $ref: '#/components/responses/ValidationError' }, '401': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' }, '404': { $ref: '#/components/responses/Error' } } }
   /uploads/presign:
     post: { tags: [Uploads], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PresignRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Presign' }, '400': { $ref: '#/components/responses/ValidationError' }, '401': { $ref: '#/components/responses/Error' } } }
-  /guest/split/calculate:
-    post: { tags: [Guest], security: [], requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GuestSplitRequest' } } } }, responses: { '200': { $ref: '#/components/responses/GuestSplit' }, '400': { $ref: '#/components/responses/ValidationError' } } }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -73,7 +71,7 @@ components:
     PageSize: { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
     DateFrom: { name: fromDate, in: query, required: false, schema: { type: string, format: date } }
     DateTo: { name: toDate, in: query, required: false, schema: { type: string, format: date } }
-    PersonIds: { name: personIds, in: query, required: false, style: form, explode: false, schema: { type: array, items: { type: string, format: uuid } } }
+    PersonIds: { name: personIds, in: query, required: false, style: form, explode: false, schema: { type: array, maxItems: 50, items: { type: string, format: uuid } } }
   responses:
     Error: { description: Generic error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
     ValidationError: { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ValidationErrorResponse' } } } }
@@ -91,7 +89,6 @@ components:
     DailySpend: { description: Daily spend payload, content: { application/json: { schema: { $ref: '#/components/schemas/DailySpendResponse' } } } }
     CategorySpend: { description: Category spend payload, content: { application/json: { schema: { $ref: '#/components/schemas/CategorySpendResponse' } } } }
     Presign: { description: Upload presign payload, content: { application/json: { schema: { $ref: '#/components/schemas/PresignResponse' } } } }
-    GuestSplit: { description: Guest split payload, content: { application/json: { schema: { $ref: '#/components/schemas/GuestSplitResponse' } } } }
   schemas:
     CurrencyCode: { type: string, pattern: '^[A-Z]{3}$' }
     SettlementAlgorithm: { type: string, enum: [MIN_TRANSFER, PAIRWISE] }
@@ -126,7 +123,6 @@ components:
     CreateInviteRequest: { type: object, additionalProperties: false, properties: { expiresAtUtc: { type: string, format: date-time, nullable: true } } }
     JoinInviteRequest: { type: object, required: [accountId, personId], properties: { accountId: { type: string, format: uuid }, personId: { type: string, format: uuid } } }
     PresignRequest: { type: object, required: [fileName, mimeType, sizeBytes, checksum], properties: { fileName: { type: string }, mimeType: { type: string }, sizeBytes: { type: integer, minimum: 1 }, checksum: { type: string } } }
-    GuestSplitRequest: { type: object, required: [eventCurrency, participants, entries], properties: { eventCurrency: { $ref: '#/components/schemas/CurrencyCode' }, participants: { type: array, minItems: 1, items: { type: object, required: [personId, displayName], properties: { personId: { type: string }, displayName: { type: string } } } }, entries: { type: array, minItems: 1, items: { type: object, required: [type, amount, currency, payerPersonId, participantSplits], properties: { type: { $ref: '#/components/schemas/EntryType' }, amount: { type: string }, currency: { $ref: '#/components/schemas/CurrencyCode' }, payerPersonId: { type: string }, participantSplits: { type: array, minItems: 1, items: { $ref: '#/components/schemas/ParticipantSplitDto' } } } } }, algorithm: { $ref: '#/components/schemas/SettlementAlgorithm' } } }
     EventResponse: { type: object, required: [event], properties: { event: { $ref: '#/components/schemas/EventDto' } } }
     EventListResponse: { type: object, required: [items, page, pageSize, totalItems], properties: { items: { type: array, items: { $ref: '#/components/schemas/EventDto' } }, page: { type: integer }, pageSize: { type: integer }, totalItems: { type: integer } } }
     EventDetailsResponse: { type: object, required: [event, people], properties: { event: { $ref: '#/components/schemas/EventDto' }, people: { type: array, items: { $ref: '#/components/schemas/PersonDto' } }, collaborators: { type: array, items: { type: object, required: [accountId, role, joinedAt], properties: { accountId: { type: string, format: uuid }, role: { type: string }, joinedAt: { type: string, format: date-time } } } } } }
@@ -138,4 +134,3 @@ components:
     DailySpendResponse: { type: object, required: [eventId, fromDate, toDate, points], properties: { eventId: { type: string, format: uuid }, fromDate: { type: string, format: date, nullable: true }, toDate: { type: string, format: date, nullable: true }, points: { type: array, items: { $ref: '#/components/schemas/AnalyticsDailyPointDto' } } } }
     CategorySpendResponse: { type: object, required: [eventId, fromDate, toDate, points], properties: { eventId: { type: string, format: uuid }, fromDate: { type: string, format: date, nullable: true }, toDate: { type: string, format: date, nullable: true }, points: { type: array, items: { $ref: '#/components/schemas/AnalyticsCategoryPointDto' } } } }
     PresignResponse: { type: object, required: [uploadUrl, method, headers, storageKey, expiresAtUtc], properties: { uploadUrl: { type: string, format: uri }, method: { type: string }, headers: { type: object, additionalProperties: { type: string } }, storageKey: { type: string }, expiresAtUtc: { type: string, format: date-time } } }
-    GuestSplitResponse: { type: object, required: [currency, balances], properties: { currency: { $ref: '#/components/schemas/CurrencyCode' }, balances: { type: array, items: { $ref: '#/components/schemas/BalanceDto' } } } }

@@ -6,6 +6,10 @@
 
 - `info.version` remains `1.0.0` while v1 is frozen.
 - Breaking changes are blocked by default.
+- Regenerate all derived artifacts whenever `packages/contracts/openapi/openapi.v1.yaml` changes:
+1. Regenerate API docs/SDKs/mock assets.
+2. Commit regenerated artifacts in the same PR or open a linked follow-up PR.
+3. Run generation and contract validation checks (`npm run contracts:check`) before merge.
 - Any breaking change requires an explicit exception PR with:
 1. `BREAKING CONTRACT CHANGE` in PR title.
 2. A migration note in this file under "Approved Exceptions".
@@ -29,3 +33,4 @@ Examples:
 ## Approved Exceptions
 
 - None.
+- Exception checklist must also state how regenerated artifacts are handled.
