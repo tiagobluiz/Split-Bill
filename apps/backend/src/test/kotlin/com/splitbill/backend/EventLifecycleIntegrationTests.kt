@@ -3,6 +3,9 @@ package com.splitbill.backend
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.splitbill.backend.auth.AccountRepository
+import com.splitbill.backend.events.BalanceSnapshotRepository
+import com.splitbill.backend.events.EntryParticipantRepository
+import com.splitbill.backend.events.EntryRepository
 import com.splitbill.backend.events.EventCollaboratorRepository
 import com.splitbill.backend.events.EventPersonRepository
 import com.splitbill.backend.events.EventRepository
@@ -33,13 +36,19 @@ class EventLifecycleIntegrationTests(
     @Autowired private val eventRepository: EventRepository,
     @Autowired private val eventCollaboratorRepository: EventCollaboratorRepository,
     @Autowired private val eventPersonRepository: EventPersonRepository,
-    @Autowired private val inviteTokenRepository: InviteTokenRepository
+    @Autowired private val inviteTokenRepository: InviteTokenRepository,
+    @Autowired private val entryRepository: EntryRepository,
+    @Autowired private val entryParticipantRepository: EntryParticipantRepository,
+    @Autowired private val balanceSnapshotRepository: BalanceSnapshotRepository
 ) {
 
     private val objectMapper = ObjectMapper().findAndRegisterModules()
 
     @BeforeEach
     fun setup() {
+        entryParticipantRepository.deleteAllInBatch()
+        entryRepository.deleteAllInBatch()
+        balanceSnapshotRepository.deleteAllInBatch()
         eventCollaboratorRepository.deleteAllInBatch()
         eventPersonRepository.deleteAllInBatch()
         inviteTokenRepository.deleteAllInBatch()
