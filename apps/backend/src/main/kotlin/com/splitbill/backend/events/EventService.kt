@@ -1,48 +1,45 @@
 package com.splitbill.backend.events
 
-import com.splitbill.backend.auth.AuthService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.security.MessageDigest
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
 @Service
 class EventService(
-    private val authService: AuthService,
     private val eventRepository: EventRepository,
     private val eventCollaboratorRepository: EventCollaboratorRepository,
     private val eventPersonRepository: EventPersonRepository,
-    private val inviteTokenRepository: InviteTokenRepository
+    private val inviteTokenRepository: InviteTokenRepository,
+    private val clock: Clock
 ) {
 
     /** Creates an event for the authenticated and verified account. */
     @Transactional
-    fun createEvent(authorizationHeader: String?, request: CreateEventRequest): EventResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        authService.requireVerified(account)
-
-        val now = Instant.now()
+    fun createEvent(accountId: UUID, request: CreateEventRequest): EventResponse {
+        val now = Instant.now(clock)
         val event = eventRepository.save(
             EventEntity(
                 id = UUID.randomUUID(),
-                ownerAccountId = account.id,
+                ownerAccountId = accountId,
                 name = request.name,
                 baseCurrency = request.baseCurrency,
                 timezone = request.timezone,
-                defaultSettlementAlgorithm = request.defaultSettlementAlgorithm ?: "MIN_TRANSFER",
+                defaultSettlementAlgorithm = (request.defaultSettlementAlgorithm ?: SettlementAlgorithm.MIN_TRANSFER).name,
                 createdAt = now,
                 updatedAt = now
             )
         )
 
         val eventId = requireNotNull(event.id)
-        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, account.id)) {
+        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, accountId)) {
             eventCollaboratorRepository.save(
                 EventCollaboratorEntity(
                     id = UUID.randomUUID(),
                     eventId = eventId,
-                    accountId = account.id,
+                    accountId = accountId,
                     role = "OWNER",
                     joinedAt = now
                 )
@@ -53,10 +50,8 @@ class EventService(
     }
 
     /** Returns paginated events where the authenticated account is a collaborator. */
-    fun listEvents(authorizationHeader: String?, page: Int, pageSize: Int): EventListResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-
-        val collaboratorRows = eventCollaboratorRepository.findAllByAccountId(account.id)
+    fun listEvents(accountId: UUID, page: Int, pageSize: Int): EventListResponse {
+        val collaboratorRows = eventCollaboratorRepository.findAllByAccountId(accountId)
         val eventIds = collaboratorRows.mapNotNull { it.eventId }.distinct()
 
         val activeEvents = if (eventIds.isEmpty()) {
@@ -80,9 +75,8 @@ class EventService(
     }
 
     /** Returns event details including people and collaborators for authorized accounts. */
-    fun getEventDetails(authorizationHeader: String?, eventId: UUID): EventDetailsResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        val event = requireEventMembership(eventId, account.id)
+    fun getEventDetails(accountId: UUID, eventId: UUID): EventDetailsResponse {
+        val event = requireEventMembership(eventId, accountId)
 
         val people = eventPersonRepository.findAllByEventIdOrderByCreatedAtAsc(eventId).map { it.toPersonDto() }
         val collaborators = eventCollaboratorRepository.findAllByEventId(eventId)
@@ -104,42 +98,39 @@ class EventService(
 
     /** Updates event settings for the event owner. */
     @Transactional
-    fun updateEvent(authorizationHeader: String?, eventId: UUID, request: UpdateEventRequest): EventResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        val event = requireEventOwner(eventId, account.id)
+    fun updateEvent(accountId: UUID, eventId: UUID, request: UpdateEventRequest): EventResponse {
+        val event = requireEventOwner(eventId, accountId)
 
         request.name?.let { event.name = it }
         request.timezone?.let { event.timezone = it }
-        request.defaultSettlementAlgorithm?.let { event.defaultSettlementAlgorithm = it }
-        event.updatedAt = Instant.now()
+        request.defaultSettlementAlgorithm?.let { event.defaultSettlementAlgorithm = it.name }
+        event.updatedAt = Instant.now(clock)
 
         return EventResponse(event = eventRepository.save(event).toDto())
     }
 
     /** Archives an event for the owner. */
     @Transactional
-    fun deleteEvent(authorizationHeader: String?, eventId: UUID) {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        val event = requireEventOwner(eventId, account.id)
-        event.archivedAt = Instant.now()
-        event.updatedAt = Instant.now()
+    fun deleteEvent(accountId: UUID, eventId: UUID) {
+        val event = requireEventOwner(eventId, accountId)
+        event.archivedAt = Instant.now(clock)
+        event.updatedAt = Instant.now(clock)
         eventRepository.save(event)
     }
 
     /** Creates a person under an event for split calculations. */
     @Transactional
-    fun createPerson(authorizationHeader: String?, eventId: UUID, request: CreatePersonRequest): PersonResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        requireEventOwner(eventId, account.id)
+    fun createPerson(accountId: UUID, eventId: UUID, request: CreatePersonRequest): PersonResponse {
+        requireEventOwner(eventId, accountId)
 
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val person = eventPersonRepository.save(
             EventPersonEntity(
                 id = UUID.randomUUID(),
                 eventId = eventId,
                 displayName = request.displayName,
                 linkedAccountId = request.linkedAccountId,
-                createdByAccountId = account.id,
+                createdByAccountId = accountId,
                 createdAt = now,
                 updatedAt = now
             )
@@ -151,13 +142,12 @@ class EventService(
     /** Updates person metadata for an event, owner-only. */
     @Transactional
     fun updatePerson(
-        authorizationHeader: String?,
+        accountId: UUID,
         eventId: UUID,
         personId: UUID,
         request: UpdatePersonRequest
     ): PersonResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        requireEventOwner(eventId, account.id)
+        requireEventOwner(eventId, accountId)
 
         val person = eventPersonRepository.findByIdAndEventId(personId, eventId) ?: throw PersonNotFoundException()
 
@@ -165,21 +155,18 @@ class EventService(
         if (request.linkedAccountId != null || request.displayName == null) {
             person.linkedAccountId = request.linkedAccountId
         }
-        person.updatedAt = Instant.now()
+        person.updatedAt = Instant.now(clock)
 
         return PersonResponse(person = eventPersonRepository.save(person).toPersonDto())
     }
 
     /** Joins an invite for the authenticated and verified account. */
     @Transactional
-    fun joinInvite(authorizationHeader: String?, token: String, request: JoinInviteRequest): JoinInviteResponse {
-        val account = authService.requireAuthenticated(authorizationHeader)
-        authService.requireVerified(account)
-
+    fun joinInvite(accountId: UUID, token: String, request: JoinInviteRequest): JoinInviteResponse {
         val invite = inviteTokenRepository.findByTokenHashAndRevokedAtIsNull(hashInviteToken(token))
             ?: throw InviteNotFoundException()
 
-        val now = Instant.now()
+        val now = Instant.now(clock)
         if (invite.expiresAt != null && !invite.expiresAt!!.isAfter(now)) {
             throw InviteNotFoundException()
         }
@@ -190,14 +177,14 @@ class EventService(
             throw PersonNotFoundException()
         }
 
-        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, account.id)) {
+        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, accountId)) {
             eventCollaboratorRepository.save(
                 EventCollaboratorEntity(
                     id = UUID.randomUUID(),
                     eventId = eventId,
-                    accountId = account.id,
+                    accountId = accountId,
                     role = "COLLABORATOR",
-                    joinedAt = Instant.now()
+                    joinedAt = Instant.now(clock)
                 )
             )
         }
@@ -228,7 +215,7 @@ class EventService(
             name = requireNotNull(name),
             baseCurrency = requireNotNull(baseCurrency),
             timezone = requireNotNull(timezone),
-            defaultSettlementAlgorithm = requireNotNull(defaultSettlementAlgorithm)
+            defaultSettlementAlgorithm = SettlementAlgorithm.valueOf(requireNotNull(defaultSettlementAlgorithm))
         )
     }
 

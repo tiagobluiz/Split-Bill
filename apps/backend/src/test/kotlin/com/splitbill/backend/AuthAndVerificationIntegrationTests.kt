@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.security.MessageDigest
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -39,7 +40,8 @@ class AuthAndVerificationIntegrationTests(
     @Autowired private val eventRepository: EventRepository,
     @Autowired private val eventCollaboratorRepository: EventCollaboratorRepository,
     @Autowired private val eventPersonRepository: EventPersonRepository,
-    @Autowired private val inviteTokenRepository: InviteTokenRepository
+    @Autowired private val inviteTokenRepository: InviteTokenRepository,
+    @Autowired private val clock: Clock
 ) {
 
     private val objectMapper = ObjectMapper().findAndRegisterModules()
@@ -280,15 +282,15 @@ class AuthAndVerificationIntegrationTests(
                 passwordHash = "seeded-hash",
                 name = "Seeded Account",
                 preferredCurrency = "USD",
-                emailVerifiedAt = Instant.now(),
-                updatedAt = Instant.now()
+                emailVerifiedAt = Instant.now(clock),
+                updatedAt = Instant.now(clock)
             )
         )
         return requireNotNull(account.id)
     }
 
     private fun insertEvent(ownerId: UUID): UUID {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val event = eventRepository.save(
             EventEntity(
                 id = UUID.randomUUID(),
@@ -315,7 +317,7 @@ class AuthAndVerificationIntegrationTests(
     }
 
     private fun insertEventPerson(eventId: UUID, createdBy: UUID): UUID {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val person = eventPersonRepository.save(
             EventPersonEntity(
                 id = UUID.randomUUID(),

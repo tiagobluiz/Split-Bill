@@ -9,6 +9,11 @@ import jakarta.validation.constraints.Size
 import java.time.Instant
 import java.util.UUID
 
+enum class SettlementAlgorithm {
+    MIN_TRANSFER,
+    PAIRWISE
+}
+
 data class CreateEventRequest(
     @field:NotBlank
     @field:Size(max = 160)
@@ -19,8 +24,7 @@ data class CreateEventRequest(
     @field:NotBlank
     @field:Size(max = 64)
     val timezone: String,
-    @field:Pattern(regexp = "^(MIN_TRANSFER|PAIRWISE)$")
-    val defaultSettlementAlgorithm: String? = null
+    val defaultSettlementAlgorithm: SettlementAlgorithm? = null
 )
 
 data class UpdateEventRequest(
@@ -28,8 +32,7 @@ data class UpdateEventRequest(
     val name: String? = null,
     @field:Size(max = 64)
     val timezone: String? = null,
-    @field:Pattern(regexp = "^(MIN_TRANSFER|PAIRWISE)$")
-    val defaultSettlementAlgorithm: String? = null
+    val defaultSettlementAlgorithm: SettlementAlgorithm? = null
 )
 
 data class EventDto(
@@ -38,7 +41,7 @@ data class EventDto(
     val name: String,
     val baseCurrency: String,
     val timezone: String,
-    val defaultSettlementAlgorithm: String
+    val defaultSettlementAlgorithm: SettlementAlgorithm
 )
 
 data class EventResponse(

@@ -1,6 +1,7 @@
 package com.splitbill.backend.auth
 
 import org.springframework.stereotype.Component
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -13,7 +14,9 @@ data class TokenSession(
 )
 
 @Component
-class AuthTokenStore {
+class AuthTokenStore(
+    private val clock: Clock
+) {
     companion object {
         private const val ACCESS_TOKEN_TTL_SECONDS = 3600L
     }
@@ -28,7 +31,7 @@ class AuthTokenStore {
             accountId = accountId,
             accessToken = access,
             refreshToken = refresh,
-            expiresAt = Instant.now().plusSeconds(ACCESS_TOKEN_TTL_SECONDS)
+            expiresAt = Instant.now(clock).plusSeconds(ACCESS_TOKEN_TTL_SECONDS)
         )
 
         accessIndex[access] = session
@@ -39,7 +42,7 @@ class AuthTokenStore {
 
     fun refresh(refreshToken: String): TokenSession? {
         val existing = refreshIndex[refreshToken] ?: return null
-        if (!existing.expiresAt.isAfter(Instant.now())) {
+        if (!existing.expiresAt.isAfter(Instant.now(clock))) {
             refreshIndex.remove(refreshToken)
             accessIndex.remove(existing.accessToken)
             return null
@@ -52,7 +55,7 @@ class AuthTokenStore {
 
     fun resolveAccess(accessToken: String): TokenSession? {
         val session = accessIndex[accessToken] ?: return null
-        if (session.expiresAt.isBefore(Instant.now())) {
+        if (session.expiresAt.isBefore(Instant.now(clock))) {
             revokeByAccess(accessToken)
             return null
         }

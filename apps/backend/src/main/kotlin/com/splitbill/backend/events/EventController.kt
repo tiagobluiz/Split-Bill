@@ -1,5 +1,6 @@
 package com.splitbill.backend.events
 
+import com.splitbill.backend.auth.AuthService
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -18,79 +19,90 @@ import java.util.UUID
 
 @RestController
 class EventController(
-    private val eventService: EventService
+    private val eventService: EventService,
+    private val authService: AuthService
 ) {
 
     @PostMapping("/events")
     @ResponseStatus(HttpStatus.CREATED)
     fun createEvent(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @Valid @RequestBody request: CreateEventRequest
     ): EventResponse {
-        return eventService.createEvent(authorizationHeader, request)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        authService.requireVerified(account)
+        return eventService.createEvent(account.id, request)
     }
 
     @GetMapping("/events")
     fun listEvents(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
-        @RequestParam(name = "page", defaultValue = "1") @Min(1) page: Int,
-        @RequestParam(name = "pageSize", defaultValue = "20") @Min(1) @Max(100) pageSize: Int
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @RequestParam(defaultValue = "1") @Min(1) page: Int,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) pageSize: Int
     ): EventListResponse {
-        return eventService.listEvents(authorizationHeader, page, pageSize)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventService.listEvents(account.id, page, pageSize)
     }
 
     @GetMapping("/events/{eventId}")
     fun getEvent(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable eventId: UUID
     ): EventDetailsResponse {
-        return eventService.getEventDetails(authorizationHeader, eventId)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventService.getEventDetails(account.id, eventId)
     }
 
     @PatchMapping("/events/{eventId}")
     fun updateEvent(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable eventId: UUID,
         @Valid @RequestBody request: UpdateEventRequest
     ): EventResponse {
-        return eventService.updateEvent(authorizationHeader, eventId, request)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventService.updateEvent(account.id, eventId, request)
     }
 
     @DeleteMapping("/events/{eventId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun deleteEvent(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable eventId: UUID
     ) {
-        eventService.deleteEvent(authorizationHeader, eventId)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        eventService.deleteEvent(account.id, eventId)
     }
 
     @PostMapping("/events/{eventId}/people")
     @ResponseStatus(HttpStatus.CREATED)
     fun createPerson(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable eventId: UUID,
         @Valid @RequestBody request: CreatePersonRequest
     ): PersonResponse {
-        return eventService.createPerson(authorizationHeader, eventId, request)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventService.createPerson(account.id, eventId, request)
     }
 
     @PatchMapping("/events/{eventId}/people/{personId}")
     fun updatePerson(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable eventId: UUID,
         @PathVariable personId: UUID,
         @Valid @RequestBody request: UpdatePersonRequest
     ): PersonResponse {
-        return eventService.updatePerson(authorizationHeader, eventId, personId, request)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventService.updatePerson(account.id, eventId, personId, request)
     }
 
     @PostMapping("/invites/{token}/join")
     fun joinInvite(
-        @RequestHeader(name = "Authorization", required = false) authorizationHeader: String?,
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
         @PathVariable token: String,
         @Valid @RequestBody request: JoinInviteRequest
     ): JoinInviteResponse {
-        return eventService.joinInvite(authorizationHeader, token, request)
+        val account = authService.requireAuthenticated(authorizationHeader)
+        authService.requireVerified(account)
+        return eventService.joinInvite(account.id, token, request)
     }
 }
