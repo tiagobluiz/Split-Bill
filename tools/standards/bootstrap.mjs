@@ -14,6 +14,11 @@ if (typeof process.versions.node !== "string") {
 }
 
 ensureFileExists(resolve(root, "package.json"), errors, "Missing root package.json.");
+ensureFileExists(
+  resolve(root, "packages/contracts/openapi/openapi.v1.yaml"),
+  errors,
+  "Missing OpenAPI contract at packages/contracts/openapi/openapi.v1.yaml."
+);
 for (const dir of REQUIRED_DIRS) {
   ensureDirExists(resolve(root, dir), errors, `Missing required path: ${dir}`);
 }

@@ -30,6 +30,7 @@ This starts both local app workspaces:
 - `npm run bootstrap`: validates local prerequisites and workspace structure.
 - `npm run dev`: starts frontend and backend workspace dev servers together.
 - `npm run lint`: validates monorepo structure and coding standards.
+- `npm run contracts:check`: validates frozen OpenAPI v1 contract coverage.
 - `npm run format:check`: checks whitespace/newline standards.
 - `npm run format`: applies whitespace/newline formatting to text files.
 - `npm test`: runs bootstrap verification tests.

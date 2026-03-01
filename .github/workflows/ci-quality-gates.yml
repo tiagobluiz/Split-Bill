@@ -83,6 +83,10 @@ jobs:
         if: steps.run-checks.outputs.should_run == 'true'
         run: npm run lint
 
+      - name: Contract checks
+        if: steps.run-checks.outputs.should_run == 'true'
+        run: npm run contracts:check
+
       - name: Formatting checks
         if: steps.run-checks.outputs.should_run == 'true'
         run: npm run format:check
@@ -95,7 +99,7 @@ jobs:
         if: steps.run-checks.outputs.should_run != 'true'
         run: |
           echo "Only documentation changes detected in this PR scope."
-          echo "Skipping bootstrap/lint/format/test quality steps."
+          echo "Skipping bootstrap/lint/contracts/format/test quality steps."
 
       - name: Publish CI scope summary
         run: |

@@ -26,7 +26,15 @@ assert.ok(
   Array.isArray(packageJson.workspaces) && packageJson.workspaces.length > 0,
   "Workspaces must be configured at root"
 );
-for (const scriptName of ["bootstrap", "dev", "lint", "format", "format:check", "test"]) {
+for (const scriptName of [
+  "bootstrap",
+  "dev",
+  "lint",
+  "contracts:check",
+  "format",
+  "format:check",
+  "test"
+]) {
   assert.ok(packageJson.scripts?.[scriptName], `Missing script: ${scriptName}`);
 }
 

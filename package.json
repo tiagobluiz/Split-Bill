@@ -15,6 +15,7 @@
     "bootstrap": "node tools/standards/bootstrap.mjs",
     "dev": "node tools/standards/dev.mjs",
     "lint": "node tools/standards/lint.mjs",
+    "contracts:check": "node tools/standards/contracts-check.mjs",
     "format": "node tools/standards/format.mjs --write",
     "format:check": "node tools/standards/format.mjs --check",
     "test": "node tools/standards/test.mjs"

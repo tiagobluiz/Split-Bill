@@ -80,6 +80,13 @@ Shared cycle (every iteration):
 - If BE/API contract changes are needed:
 - require/update corresponding `contracts` issue first;
 - pause FE-only flow until contract alignment is explicit.
+- Mandatory UX governance pre-check (before implementation and before PR update):
+- read `/docs/frontend/ux-guidelines-v1.md` completely;
+- read `/docs/frontend/ux-render-prompts-v1.md` and identify applicable screen prompts;
+- ensure all FE work strictly follows the UX guideline; guideline rules override personal/team preference.
+- Mandatory visual implementation reference:
+- generate/review the relevant prompt-based render(s) and use them as the required visual target during implementation;
+- if implementation differs from render guidance, document deviation with justification and follow-up issue.
 - FE baseline is mandatory:
 - MUI as UI foundation;
 - React Hook Form for forms;

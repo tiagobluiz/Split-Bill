@@ -1,3 +1,13 @@
 # Contracts Workspace
 
-This workspace will contain OpenAPI source and generated TypeScript clients in SB-003 and SB-004.
+OpenAPI v1 source of truth:
+
+- `packages/contracts/openapi/openapi.v1.yaml`
+
+Change-control policy:
+
+- `packages/contracts/CHANGE_CONTROL.md`
+
+Validation command (from repository root):
+
+- `npm run contracts:check`
