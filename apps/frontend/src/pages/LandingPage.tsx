@@ -15,6 +15,7 @@ import {
   Typography
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
+import appLogo from "../assets/branding/split-bill-logo.png";
 import balancesIllustration from "../assets/landing/feature-balances.svg";
 import expensesIllustration from "../assets/landing/feature-expenses.svg";
 import inviteIllustration from "../assets/landing/feature-invite.svg";
@@ -49,9 +50,14 @@ export function LandingPage() {
             sx={{ borderBottom: "1px solid #E7D7CC", bgcolor: "transparent" }}
           >
             <Toolbar sx={{ px: { xs: 0, md: 1 }, minHeight: "64px !important" }}>
-              <Typography variant="h5" fontWeight={700} sx={{ flexGrow: 1 }}>
-                Split-Bill
-              </Typography>
+              <Box
+                component={RouterLink}
+                to="/"
+                sx={{ flexGrow: 1, display: "inline-flex", alignItems: "center", textDecoration: "none" }}
+                aria-label="Split-Bill home"
+              >
+                <Box component="img" src={appLogo} alt="Split-Bill logo" sx={{ height: 44, width: "auto" }} />
+              </Box>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: "none", md: "flex" } }}>
                 <Button href="#features" color="inherit" sx={{ color: "text.secondary", minHeight: 40 }}>
                   Features

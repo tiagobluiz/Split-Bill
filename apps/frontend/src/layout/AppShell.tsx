@@ -26,6 +26,7 @@ import {
 import { useState } from "react";
 import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import appLogo from "../assets/branding/split-bill-logo.png";
 
 const DRAWER_WIDTH = 272;
 const RAIL_WIDTH = 80;
@@ -70,9 +71,19 @@ export function AppShell() {
           }}
         >
           <Box sx={{ p: 3, pb: 2 }}>
-            <Typography variant="h6" fontWeight={700}>
-              Split-Bill
-            </Typography>
+            <Box
+              component={RouterLink}
+              to="/app/dashboard"
+              sx={{ display: "inline-flex", alignItems: "center" }}
+              aria-label="Split-Bill dashboard"
+            >
+              <Box
+                component="img"
+                src={appLogo}
+                alt="Split-Bill logo"
+                sx={{ height: isTablet ? 34 : 44, width: "auto", maxWidth: isTablet ? 44 : 178 }}
+              />
+            </Box>
           </Box>
           <List sx={{ px: 1 }}>
             {NAV_ITEMS.map((item) => {
