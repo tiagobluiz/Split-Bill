@@ -56,7 +56,7 @@ export function LandingPage() {
                 sx={{ flexGrow: 1, display: "inline-flex", alignItems: "center", textDecoration: "none" }}
                 aria-label="Split-Bill home"
               >
-                <Box component="img" src={appLogo} alt="Split-Bill logo" sx={{ height: 44, width: "auto" }} />
+                <Box component="img" src={appLogo} alt="Split-Bill logo" sx={{ height: { xs: 56, md: 64 }, width: "auto" }} />
               </Box>
               <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: "none", md: "flex" } }}>
                 <Button href="#features" color="inherit" sx={{ color: "text.secondary", minHeight: 40 }}>
