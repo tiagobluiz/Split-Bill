@@ -6,5 +6,6 @@ open class ApiException(
     val status: HttpStatus,
     val code: String,
     override val message: String,
-    val details: Map<String, Any?>? = null
-) : RuntimeException(message)
+    val details: Map<String, Any?>? = null,
+    cause: Throwable? = null
+) : RuntimeException(message, cause)

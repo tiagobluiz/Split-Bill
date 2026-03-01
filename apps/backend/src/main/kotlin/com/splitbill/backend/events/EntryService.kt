@@ -147,8 +147,10 @@ class EntryService(
 
     fun listEntries(accountId: UUID, eventId: UUID): EntryListResponse {
         requireEventMembership(eventId, accountId)
-        val entries = entryRepository.findAllByEventIdAndDeletedAtIsNullOrderByOccurredAtUtcDescCreatedAtDesc(eventId)
-        val participantsByEntry = entryParticipantRepository.findAllByEntryIdIn(entries.mapNotNull { it.id })
+        val entries = entryRepository.findAllByEventIdAndDeletedAtIsNullOrderByOccurredAtUtcDescCreatedAtDescIdDesc(eventId)
+        val participantsByEntry = entryParticipantRepository.findAllByEntryIdInOrderByEntryIdAscCreatedAtAscIdAsc(
+            entries.mapNotNull { it.id }
+        )
             .groupBy { it.entryId }
 
         return EntryListResponse(
@@ -178,9 +180,9 @@ class EntryService(
             )
         )
     } catch (ex: SplitValidationException) {
-        throw EntrySplitInvalidException(ex.violations)
+        throw EntrySplitInvalidException(ex.violations, ex)
     } catch (ex: IllegalArgumentException) {
-        throw EntrySplitInvalidException(listOf(ex.message ?: "invalid split input"))
+        throw EntrySplitInvalidException(listOf(ex.message ?: "invalid split input"), ex)
     }
 
     private fun validateParticipantPeopleAndBuildInstructions(
@@ -213,8 +215,12 @@ class EntryService(
     }
 
     private fun recomputeBalanceSnapshots(eventId: UUID) {
-        val activeEntries = entryRepository.findAllByEventIdAndDeletedAtIsNullOrderByOccurredAtUtcDescCreatedAtDesc(eventId)
-        val entryParticipantsByEntry = entryParticipantRepository.findAllByEntryIdIn(activeEntries.mapNotNull { it.id })
+        val activeEntries = entryRepository.findAllByEventIdAndDeletedAtIsNullOrderByOccurredAtUtcDescCreatedAtDescIdDesc(
+            eventId
+        )
+        val entryParticipantsByEntry = entryParticipantRepository.findAllByEntryIdInOrderByEntryIdAscCreatedAtAscIdAsc(
+            activeEntries.mapNotNull { it.id }
+        )
             .groupBy { it.entryId }
 
         val eventPeople = eventPersonRepository.findAllByEventIdOrderByCreatedAtAsc(eventId).mapNotNull { it.id }

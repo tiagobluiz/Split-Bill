@@ -5,6 +5,6 @@ import java.util.UUID
 
 interface EntryParticipantRepository : JpaRepository<EntryParticipantEntity, UUID> {
     fun findAllByEntryIdOrderByCreatedAtAsc(entryId: UUID): List<EntryParticipantEntity>
-    fun findAllByEntryIdIn(entryIds: List<UUID>): List<EntryParticipantEntity>
+    fun findAllByEntryIdInOrderByEntryIdAscCreatedAtAscIdAsc(entryIds: List<UUID>): List<EntryParticipantEntity>
     fun deleteAllByEntryId(entryId: UUID)
 }

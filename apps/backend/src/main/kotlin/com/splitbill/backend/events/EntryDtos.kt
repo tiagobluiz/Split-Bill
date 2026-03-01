@@ -2,6 +2,7 @@ package com.splitbill.backend.events
 
 import com.splitbill.backend.split.domain.SplitMode
 import jakarta.validation.Valid
+import jakarta.validation.constraints.DecimalMax
 import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
@@ -17,7 +18,10 @@ data class EntryParticipantRequest(
     val personId: UUID,
     @field:NotNull
     val splitMode: SplitMode,
+    @field:DecimalMin(value = "0.00")
+    @field:DecimalMax(value = "100.00")
     val splitPercent: BigDecimal? = null,
+    @field:DecimalMin(value = "0.00")
     val splitAmount: BigDecimal? = null
 )
 

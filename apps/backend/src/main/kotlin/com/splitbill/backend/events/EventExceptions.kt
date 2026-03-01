@@ -52,9 +52,12 @@ class EntryCurrencyConversionNotSupportedException : ApiException(
 )
 
 class EntrySplitInvalidException(
-    violations: List<String>
+    violations: List<String>,
+    cause: Throwable? = null
 ) : ApiException(
     status = HttpStatus.BAD_REQUEST,
     code = "ENTRY_SPLIT_INVALID",
-    message = violations.joinToString("; ")
+    message = violations.takeIf { it.isNotEmpty() }?.joinToString("; ")
+        ?: "Entry split input is invalid",
+    cause = cause
 )

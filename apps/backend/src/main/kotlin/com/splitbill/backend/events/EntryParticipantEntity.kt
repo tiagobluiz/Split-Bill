@@ -6,13 +6,26 @@ import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
+import jakarta.persistence.Index
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
 @Entity
-@Table(name = "entry_participants")
+@Table(
+    name = "entry_participants",
+    uniqueConstraints = [
+        UniqueConstraint(
+            name = "uq_entry_participants_entry_person",
+            columnNames = ["entry_id", "person_id"]
+        )
+    ],
+    indexes = [
+        Index(name = "idx_entry_participants_entry", columnList = "entry_id")
+    ]
+)
 class EntryParticipantEntity(
     @Id
     @Column(name = "id", nullable = false)
