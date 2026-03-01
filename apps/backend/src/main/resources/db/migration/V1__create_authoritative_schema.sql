@@ -141,7 +141,7 @@ CREATE TABLE fx_rates (
 CREATE TABLE balance_snapshots (
     id UUID PRIMARY KEY,
     event_id UUID NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    person_id UUID NOT NULL REFERENCES event_people(id),
+    person_id UUID NOT NULL REFERENCES event_people(id) ON DELETE CASCADE,
     net_amount NUMERIC(19, 4) NOT NULL,
     computed_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT uq_balance_snapshots_event_person UNIQUE (event_id, person_id)

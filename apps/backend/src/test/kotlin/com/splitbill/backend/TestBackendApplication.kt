@@ -5,5 +5,5 @@ import org.springframework.boot.with
 
 
 fun main(args: Array<String>) {
-	fromApplication<BackendApplication>().with(TestcontainersConfiguration::class).run(*args)
+	fromApplication<SplitBillApplication>().with(TestcontainersConfiguration::class).run(*args)
 }

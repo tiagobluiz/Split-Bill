@@ -49,7 +49,8 @@ class BackendApplicationTests(
 			"audit_log"
 		)
 
-		assertTrue(requiredTables.all { existingTables.contains(it) })
+		val missingTables = requiredTables - existingTables
+		assertTrue(missingTables.isEmpty(), "Missing tables: $missingTables")
 	}
 
 	@Test
