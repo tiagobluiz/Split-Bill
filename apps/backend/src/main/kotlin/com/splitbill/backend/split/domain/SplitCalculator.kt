@@ -3,16 +3,33 @@ package com.splitbill.backend.split.domain
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-/** Domain service implementing deterministic split policies per [SplitMode]. */
-class SplitCalculator {
+/** Strategy contract for mode-specific split allocation. */
+interface SplitModeCalculator {
+    val mode: SplitMode
+    fun calculateAllocations(request: SplitCalculationRequest): List<ParticipantAllocation>
+}
+
+/** Domain service orchestrating mode strategies and preserving split invariants. */
+class SplitCalculator(
+    calculators: List<SplitModeCalculator> = listOf(
+        EvenSplitModeCalculator(),
+        PercentSplitModeCalculator(),
+        AmountSplitModeCalculator()
+    )
+) {
+    private val calculatorsByMode = calculators.associateBy { it.mode }
+
+    init {
+        require(calculatorsByMode.keys == SplitMode.entries.toSet()) {
+            "a split mode calculator must be provided for every supported split mode"
+        }
+    }
 
     /** Calculates per-participant allocations and guarantees total preservation. */
     fun calculate(request: SplitCalculationRequest): SplitCalculationResult {
-        val allocations = when (request.mode) {
-            SplitMode.EVEN -> computeEven(request)
-            SplitMode.PERCENT -> computePercent(request)
-            SplitMode.AMOUNT -> computeAmount(request)
-        }
+        val modeCalculator = calculatorsByMode[request.mode]
+            ?: throw SplitValidationException(listOf("unsupported split mode: ${request.mode}"))
+        val allocations = modeCalculator.calculateAllocations(request)
 
         val sum = allocations.fold(BigDecimal.ZERO) { acc, a -> acc + a.amount.value }
         if (sum.compareTo(request.totalAmount.value) != 0) {
@@ -25,12 +42,17 @@ class SplitCalculator {
             allocations = allocations
         )
     }
+}
 
-    private fun computeEven(request: SplitCalculationRequest): List<ParticipantAllocation> {
+/** Strategy for deterministic even split with remainder distribution. */
+class EvenSplitModeCalculator : SplitModeCalculator {
+    override val mode: SplitMode = SplitMode.EVEN
+
+    override fun calculateAllocations(request: SplitCalculationRequest): List<ParticipantAllocation> {
         val ordered = request.participantSplits
             .map { it as EvenSplitInstruction }
             .sortedBy { it.participantId.value.toString() }
-        val units = toUnits(request.totalAmount.value)
+        val units = SplitUnitConverter.toUnits(request.totalAmount.value)
         val count = ordered.size.toLong()
         val base = units / count
         var remainder = units % count
@@ -42,15 +64,20 @@ class SplitCalculator {
             } else {
                 base
             }
-            ParticipantAllocation(it.participantId, DecimalAmount.of(fromUnits(unitShare)))
+            ParticipantAllocation(it.participantId, DecimalAmount.of(SplitUnitConverter.fromUnits(unitShare)))
         }
     }
+}
 
-    private fun computePercent(request: SplitCalculationRequest): List<ParticipantAllocation> {
+/** Strategy for deterministic percent split using largest-remainder policy. */
+class PercentSplitModeCalculator : SplitModeCalculator {
+    override val mode: SplitMode = SplitMode.PERCENT
+
+    override fun calculateAllocations(request: SplitCalculationRequest): List<ParticipantAllocation> {
         val ordered = request.participantSplits
             .map { it as PercentSplitInstruction }
             .sortedBy { it.participantId.value.toString() }
-        val totalUnits = toUnits(request.totalAmount.value)
+        val totalUnits = SplitUnitConverter.toUnits(request.totalAmount.value)
 
         data class Raw(val participantId: ParticipantId, val floor: Long, val remainder: BigDecimal)
 
@@ -83,18 +110,25 @@ class SplitCalculator {
 
         return rawParts.map { raw ->
             val finalUnits = raw.floor + (bonusByParticipant[raw.participantId] ?: 0L)
-            ParticipantAllocation(raw.participantId, DecimalAmount.of(fromUnits(finalUnits)))
+            ParticipantAllocation(raw.participantId, DecimalAmount.of(SplitUnitConverter.fromUnits(finalUnits)))
         }
     }
+}
 
-    private fun computeAmount(request: SplitCalculationRequest): List<ParticipantAllocation> {
+/** Strategy for deterministic fixed-amount split. */
+class AmountSplitModeCalculator : SplitModeCalculator {
+    override val mode: SplitMode = SplitMode.AMOUNT
+
+    override fun calculateAllocations(request: SplitCalculationRequest): List<ParticipantAllocation> {
         return request.participantSplits
             .map { it as AmountSplitInstruction }
             .sortedBy { it.participantId.value.toString() }
             .map { ParticipantAllocation(it.participantId, it.amount) }
     }
+}
 
-    private fun toUnits(value: BigDecimal): Long {
+private object SplitUnitConverter {
+    fun toUnits(value: BigDecimal): Long {
         val scale = DecimalAmount.SCALE
         return value
             .setScale(scale, RoundingMode.UNNECESSARY)
@@ -102,7 +136,7 @@ class SplitCalculator {
             .longValueExact()
     }
 
-    private fun fromUnits(units: Long): BigDecimal {
+    fun fromUnits(units: Long): BigDecimal {
         val scale = DecimalAmount.SCALE
         return BigDecimal(units).movePointLeft(scale).setScale(scale, RoundingMode.UNNECESSARY)
     }
