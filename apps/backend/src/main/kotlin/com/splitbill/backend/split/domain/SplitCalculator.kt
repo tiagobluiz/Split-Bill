@@ -3,8 +3,10 @@ package com.splitbill.backend.split.domain
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+/** Domain service implementing deterministic split policies per [SplitMode]. */
 class SplitCalculator {
 
+    /** Calculates per-participant allocations and guarantees total preservation. */
     fun calculate(request: SplitCalculationRequest): SplitCalculationResult {
         val allocations = when (request.mode) {
             SplitMode.EVEN -> computeEven(request)
