@@ -20,6 +20,7 @@ import java.util.UUID
 @RestController
 class EventController(
     private val eventService: EventService,
+    private val eventBalanceService: EventBalanceService,
     private val entryService: EntryService,
     private val authService: AuthService
 ) {
@@ -52,6 +53,16 @@ class EventController(
     ): EventDetailsResponse {
         val account = authService.requireAuthenticated(authorizationHeader)
         return eventService.getEventDetails(account.id, eventId)
+    }
+
+    @GetMapping("/events/{eventId}/balances")
+    fun getBalances(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID,
+        @RequestParam(required = false) algorithm: SettlementAlgorithm?
+    ): BalancesResponse {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return eventBalanceService.getBalances(account.id, eventId, algorithm)
     }
 
     @PatchMapping("/events/{eventId}")

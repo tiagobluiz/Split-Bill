@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
+import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
 
@@ -105,6 +106,30 @@ data class JoinInviteRequest(
 data class JoinInviteResponse(
     val eventId: UUID,
     val personId: UUID
+)
+
+data class MoneyDto(
+    val amount: BigDecimal,
+    val currency: String
+)
+
+data class BalanceCounterpartyAmountDto(
+    val counterpartyPersonId: UUID,
+    val amount: MoneyDto
+)
+
+data class BalanceDto(
+    val personId: UUID,
+    val netAmountInEventCurrency: BigDecimal,
+    val owes: List<BalanceCounterpartyAmountDto>,
+    val owedBy: List<BalanceCounterpartyAmountDto>
+)
+
+data class BalancesResponse(
+    val eventId: UUID,
+    val currency: String,
+    val algorithm: SettlementAlgorithm,
+    val balances: List<BalanceDto>
 )
 
 data class PageParams(
