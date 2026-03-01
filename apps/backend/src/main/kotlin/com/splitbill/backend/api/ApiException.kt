@@ -2,7 +2,7 @@ package com.splitbill.backend.api
 
 import org.springframework.http.HttpStatus
 
-class ApiException(
+open class ApiException(
     val status: HttpStatus,
     val code: String,
     override val message: String,

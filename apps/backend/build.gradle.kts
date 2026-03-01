@@ -1,5 +1,6 @@
 plugins {
 	kotlin("jvm") version "2.2.21"
+	kotlin("plugin.jpa") version "2.2.21"
 	kotlin("plugin.spring") version "2.2.21"
 	id("org.springframework.boot") version "4.0.2"
 	id("io.spring.dependency-management") version "1.1.7"
@@ -20,6 +21,7 @@ repositories {
 }
 
 dependencies {
+	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.springframework.boot:spring-boot-starter-jdbc")
 	implementation("org.springframework.security:spring-security-crypto")

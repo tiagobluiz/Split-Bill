@@ -1,146 +1,96 @@
 package com.splitbill.backend.events
 
-import com.splitbill.backend.api.ApiException
 import com.splitbill.backend.auth.AuthService
-import org.springframework.http.HttpStatus
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
-import java.sql.Timestamp
+import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
 import java.util.UUID
 
 @Service
 class EventService(
-    private val jdbcTemplate: JdbcTemplate,
-    private val authService: AuthService
+    private val authService: AuthService,
+    private val eventRepository: EventRepository,
+    private val eventCollaboratorRepository: EventCollaboratorRepository,
+    private val eventPersonRepository: EventPersonRepository,
+    private val inviteTokenRepository: InviteTokenRepository
 ) {
 
+    /** Creates an event for the authenticated and verified account. */
+    @Transactional
     fun createEvent(authorizationHeader: String?, request: CreateEventRequest): EventResponse {
         val account = authService.requireAuthenticated(authorizationHeader)
         authService.requireVerified(account)
 
-        val event = insertEvent(
-            ownerAccountId = account.id,
-            name = request.name,
-            baseCurrency = request.baseCurrency,
-            timezone = request.timezone,
-            defaultSettlementAlgorithm = request.defaultSettlementAlgorithm ?: "MIN_TRANSFER"
+        val now = Instant.now()
+        val event = eventRepository.save(
+            EventEntity(
+                id = UUID.randomUUID(),
+                ownerAccountId = account.id,
+                name = request.name,
+                baseCurrency = request.baseCurrency,
+                timezone = request.timezone,
+                defaultSettlementAlgorithm = request.defaultSettlementAlgorithm ?: "MIN_TRANSFER",
+                createdAt = now,
+                updatedAt = now
+            )
         )
 
-        insertOwnerCollaborator(event.id, account.id)
+        val eventId = requireNotNull(event.id)
+        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, account.id)) {
+            eventCollaboratorRepository.save(
+                EventCollaboratorEntity(
+                    id = UUID.randomUUID(),
+                    eventId = eventId,
+                    accountId = account.id,
+                    role = "OWNER",
+                    joinedAt = now
+                )
+            )
+        }
 
-        return EventResponse(event = event)
+        return EventResponse(event = event.toDto())
     }
 
+    /** Joins an invite for the authenticated and verified account. */
+    @Transactional
     fun joinInvite(authorizationHeader: String?, token: String, request: JoinInviteRequest): JoinInviteResponse {
         val account = authService.requireAuthenticated(authorizationHeader)
         authService.requireVerified(account)
 
-        val eventId = findInviteEvent(token)
-        val personExists = jdbcTemplate.queryForObject(
-            """
-            SELECT EXISTS(
-                SELECT 1
-                FROM event_people
-                WHERE id = ? AND event_id = ?
-            )
-            """.trimIndent(),
-            Boolean::class.java,
-            request.personId,
-            eventId
-        ) ?: false
+        val invite = inviteTokenRepository.findByTokenHashAndRevokedAtIsNull(token) ?: throw InviteNotFoundException()
+        if (invite.expiresAt != null && invite.expiresAt!!.isBefore(Instant.now())) {
+            throw InviteNotFoundException()
+        }
 
-        if (!personExists) {
-            throw ApiException(
-                status = HttpStatus.NOT_FOUND,
-                code = "PERSON_NOT_FOUND",
-                message = "Person was not found in this event"
+        val eventId = requireNotNull(invite.eventId)
+        val personId = requireNotNull(request.personId)
+        if (!eventPersonRepository.existsByIdAndEventId(personId, eventId)) {
+            throw PersonNotFoundException()
+        }
+
+        if (!eventCollaboratorRepository.existsByEventIdAndAccountId(eventId, account.id)) {
+            eventCollaboratorRepository.save(
+                EventCollaboratorEntity(
+                    id = UUID.randomUUID(),
+                    eventId = eventId,
+                    accountId = account.id,
+                    role = "COLLABORATOR",
+                    joinedAt = Instant.now()
+                )
             )
         }
 
-        jdbcTemplate.update(
-            """
-            INSERT INTO event_collaborators (id, event_id, account_id, role)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT (event_id, account_id) DO NOTHING
-            """.trimIndent(),
-            UUID.randomUUID(),
-            eventId,
-            account.id,
-            "COLLABORATOR"
-        )
-
-        return JoinInviteResponse(eventId = eventId, personId = request.personId)
+        return JoinInviteResponse(eventId = eventId, personId = personId)
     }
 
-    private fun insertEvent(
-        ownerAccountId: UUID,
-        name: String,
-        baseCurrency: String,
-        timezone: String,
-        defaultSettlementAlgorithm: String
-    ): EventDto {
-        val eventId = UUID.randomUUID()
-        val now = Timestamp.from(Instant.now())
-        jdbcTemplate.update(
-            """
-            INSERT INTO events (
-                id, owner_account_id, name, base_currency, timezone,
-                default_settlement_algorithm, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            eventId,
-            ownerAccountId,
-            name,
-            baseCurrency,
-            timezone,
-            defaultSettlementAlgorithm,
-            now,
-            now
-        )
-
+    private fun EventEntity.toDto(): EventDto {
         return EventDto(
-            id = eventId,
-            ownerAccountId = ownerAccountId,
-            name = name,
-            baseCurrency = baseCurrency,
-            timezone = timezone,
-            defaultSettlementAlgorithm = defaultSettlementAlgorithm
-        )
-    }
-
-    private fun insertOwnerCollaborator(eventId: UUID, accountId: UUID) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO event_collaborators (id, event_id, account_id, role)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT (event_id, account_id) DO NOTHING
-            """.trimIndent(),
-            UUID.randomUUID(),
-            eventId,
-            accountId,
-            "OWNER"
-        )
-    }
-
-    private fun findInviteEvent(token: String): UUID {
-        val rows = jdbcTemplate.queryForList(
-            """
-            SELECT event_id
-            FROM invite_tokens
-            WHERE token_hash = ?
-              AND revoked_at IS NULL
-              AND (expires_at IS NULL OR expires_at > NOW())
-            LIMIT 1
-            """.trimIndent(),
-            UUID::class.java,
-            token
-        )
-
-        return rows.firstOrNull() ?: throw ApiException(
-            status = HttpStatus.NOT_FOUND,
-            code = "INVITE_NOT_FOUND",
-            message = "Invite token is invalid or expired"
+            id = requireNotNull(id),
+            ownerAccountId = requireNotNull(ownerAccountId),
+            name = requireNotNull(name),
+            baseCurrency = requireNotNull(baseCurrency),
+            timezone = requireNotNull(timezone),
+            defaultSettlementAlgorithm = requireNotNull(defaultSettlementAlgorithm)
         )
     }
 }

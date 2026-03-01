@@ -2,22 +2,30 @@ package com.splitbill.backend
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.splitbill.backend.auth.AccountEntity
+import com.splitbill.backend.auth.AccountRepository
+import com.splitbill.backend.events.EventCollaboratorEntity
+import com.splitbill.backend.events.EventCollaboratorRepository
+import com.splitbill.backend.events.EventEntity
+import com.splitbill.backend.events.EventPersonEntity
+import com.splitbill.backend.events.EventPersonRepository
+import com.splitbill.backend.events.EventRepository
+import com.splitbill.backend.events.InviteTokenEntity
+import com.splitbill.backend.events.InviteTokenRepository
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
 import org.springframework.context.annotation.Import
-import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.servlet.MockMvc
-import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.springframework.web.context.WebApplicationContext
-import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
@@ -25,42 +33,31 @@ import java.util.UUID
 @SpringBootTest
 @AutoConfigureMockMvc
 class AuthAndVerificationIntegrationTests(
-    @Autowired private val jdbcTemplate: JdbcTemplate,
-    @Autowired private val webApplicationContext: WebApplicationContext
+    @Autowired private val mockMvc: MockMvc,
+    @Autowired private val accountRepository: AccountRepository,
+    @Autowired private val eventRepository: EventRepository,
+    @Autowired private val eventCollaboratorRepository: EventCollaboratorRepository,
+    @Autowired private val eventPersonRepository: EventPersonRepository,
+    @Autowired private val inviteTokenRepository: InviteTokenRepository
 ) {
 
     private val objectMapper = ObjectMapper().findAndRegisterModules()
-    private lateinit var mockMvc: MockMvc
 
     @BeforeEach
     fun setup() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext).build()
-
-        jdbcTemplate.execute(
-            """
-            TRUNCATE TABLE
-                audit_log,
-                balance_snapshots,
-                entry_receipts,
-                entry_participants,
-                entries,
-                invite_tokens,
-                event_categories,
-                event_people,
-                event_collaborators,
-                events,
-                accounts
-            RESTART IDENTITY CASCADE
-            """.trimIndent()
-        )
+        eventCollaboratorRepository.deleteAllInBatch()
+        eventPersonRepository.deleteAllInBatch()
+        inviteTokenRepository.deleteAllInBatch()
+        eventRepository.deleteAllInBatch()
+        accountRepository.deleteAllInBatch()
     }
 
     @Test
     fun `register returns auth session for new account`() {
         val session = register(email = "new-user@splitbill.test")
 
-        org.junit.jupiter.api.Assertions.assertNotNull(session.path("tokens").path("accessToken").asText())
-        org.junit.jupiter.api.Assertions.assertFalse(session.path("account").path("emailVerified").asBoolean())
+        assertNotNull(session.path("tokens").path("accessToken").asText())
+        assertFalse(session.path("account").path("emailVerified").asBoolean())
     }
 
     @Test
@@ -275,83 +272,67 @@ class AuthAndVerificationIntegrationTests(
     }
 
     private fun insertVerifiedAccount(email: String): UUID {
-        val accountId = UUID.randomUUID()
-        val now = Timestamp.from(Instant.now())
-        jdbcTemplate.update(
-            """
-            INSERT INTO accounts (
-                id, email, password_hash, name, preferred_currency, email_verified_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            accountId,
-            email,
-            "seeded-hash",
-            "Seeded Account",
-            "USD",
-            now,
-            now,
-            now
+        val account = accountRepository.save(
+            AccountEntity(
+                id = UUID.randomUUID(),
+                email = email,
+                passwordHash = "seeded-hash",
+                name = "Seeded Account",
+                preferredCurrency = "USD",
+                emailVerifiedAt = Instant.now(),
+                updatedAt = Instant.now()
+            )
         )
-        return accountId
+        return requireNotNull(account.id)
     }
 
     private fun insertEvent(ownerId: UUID): UUID {
-        val eventId = UUID.randomUUID()
-        val now = Timestamp.from(Instant.now())
-        jdbcTemplate.update(
-            """
-            INSERT INTO events (
-                id, owner_account_id, name, base_currency, timezone,
-                default_settlement_algorithm, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent(),
-            eventId,
-            ownerId,
-            "Seeded Event",
-            "USD",
-            "UTC",
-            "MIN_TRANSFER",
-            now,
-            now
+        val now = Instant.now()
+        val event = eventRepository.save(
+            EventEntity(
+                id = UUID.randomUUID(),
+                ownerAccountId = ownerId,
+                name = "Seeded Event",
+                baseCurrency = "USD",
+                timezone = "UTC",
+                defaultSettlementAlgorithm = "MIN_TRANSFER",
+                createdAt = now,
+                updatedAt = now
+            )
         )
-        jdbcTemplate.update(
-            """
-            INSERT INTO event_collaborators (id, event_id, account_id, role)
-            VALUES (?, ?, ?, ?)
-            """.trimIndent(),
-            UUID.randomUUID(),
-            eventId,
-            ownerId,
-            "OWNER"
+
+        eventCollaboratorRepository.save(
+            EventCollaboratorEntity(
+                id = UUID.randomUUID(),
+                eventId = event.id,
+                accountId = ownerId,
+                role = "OWNER",
+                joinedAt = now
+            )
         )
-        return eventId
+        return requireNotNull(event.id)
     }
 
     private fun insertEventPerson(eventId: UUID, createdBy: UUID): UUID {
-        val personId = UUID.randomUUID()
-        jdbcTemplate.update(
-            """
-            INSERT INTO event_people (id, event_id, display_name, created_by_account_id)
-            VALUES (?, ?, ?, ?)
-            """.trimIndent(),
-            personId,
-            eventId,
-            "Seeded Person",
-            createdBy
+        val person = eventPersonRepository.save(
+            EventPersonEntity(
+                id = UUID.randomUUID(),
+                eventId = eventId,
+                displayName = "Seeded Person",
+                createdByAccountId = createdBy
+            )
         )
-        return personId
+        return requireNotNull(person.id)
     }
 
     private fun insertInvite(eventId: UUID, createdBy: UUID, token: String) {
-        jdbcTemplate.update(
-            """
-            INSERT INTO invite_tokens (id, event_id, token_hash, created_by_account_id)
-            VALUES (?, ?, ?, ?)
-            """.trimIndent(),
-            UUID.randomUUID(),
-            eventId,
-            token,
-            createdBy
+        inviteTokenRepository.save(
+            InviteTokenEntity(
+                id = UUID.randomUUID(),
+                eventId = eventId,
+                tokenHash = token,
+                createdByAccountId = createdBy
+            )
         )
     }
 

@@ -1,10 +1,10 @@
 package com.splitbill.backend.auth
 
-import com.splitbill.backend.api.ApiException
 import org.springframework.dao.DataIntegrityViolationException
-import org.springframework.http.HttpStatus
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 import java.util.UUID
 
 data class AuthenticatedAccount(
@@ -19,87 +19,68 @@ class AuthService(
     private val passwordEncoder: PasswordEncoder
 ) {
 
+    /** Registers a new account and returns an authenticated session payload. */
+    @Transactional
     fun register(request: RegisterRequest): AuthSessionResponse {
         val email = requireNotNull(request.email)
         val password = requireNotNull(request.password)
         val name = requireNotNull(request.name)
 
-        if (accountRepository.findByEmail(email) != null) {
-            throw ApiException(
-                status = HttpStatus.CONFLICT,
-                code = "ACCOUNT_ALREADY_EXISTS",
-                message = "An account with this email already exists"
-            )
+        if (accountRepository.findByEmailIgnoreCase(email) != null) {
+            throw AccountAlreadyExistsException()
         }
 
         val account = try {
-            val encodedPassword = requireNotNull(passwordEncoder.encode(password)) {
-                "Password encoding failed"
-            }
-            accountRepository.createAccount(
-                email = email,
-                passwordHash = encodedPassword,
-                name = name,
-                preferredCurrency = "USD"
+            accountRepository.save(
+                AccountEntity(
+                    id = UUID.randomUUID(),
+                    email = email,
+                    passwordHash = requireNotNull(passwordEncoder.encode(password)) { "Password encoding failed" },
+                    name = name,
+                    preferredCurrency = "USD",
+                    emailVerifiedAt = null,
+                    updatedAt = Instant.now()
+                )
             )
-        } catch (ex: DataIntegrityViolationException) {
-            throw ApiException(
-                status = HttpStatus.CONFLICT,
-                code = "ACCOUNT_ALREADY_EXISTS",
-                message = "An account with this email already exists"
-            )
+        } catch (_: DataIntegrityViolationException) {
+            throw AccountAlreadyExistsException()
         }
 
         return buildSessionResponse(account)
     }
 
+    /** Verifies an account e-mail from a verification token payload. */
+    @Transactional
     fun verifyEmail(request: VerifyEmailRequest): MessageResponse {
-        val accountId = request.token.toUuidOrNull() ?: throw ApiException(
-            status = HttpStatus.NOT_FOUND,
-            code = "ACCOUNT_NOT_FOUND",
-            message = "Verification token is invalid"
-        )
+        val accountId = request.token.toUuidOrNull() ?: throw VerificationTokenInvalidException()
 
-        val updated = accountRepository.verifyEmail(accountId)
-        if (!updated) {
-            throw ApiException(
-                status = HttpStatus.NOT_FOUND,
-                code = "ACCOUNT_NOT_FOUND",
-                message = "Verification token is invalid"
-            )
+        val account = accountRepository.findById(accountId).orElseThrow { VerificationTokenInvalidException() }
+        if (account.emailVerifiedAt == null) {
+            account.emailVerifiedAt = Instant.now()
+            account.updatedAt = Instant.now()
+            accountRepository.save(account)
         }
 
         return MessageResponse(message = "Email verified")
     }
 
+    /** Authenticates credentials and returns a fresh session payload. */
     fun login(request: LoginRequest): AuthSessionResponse {
         val email = requireNotNull(request.email)
         val password = requireNotNull(request.password)
 
-        val account = accountRepository.findByEmail(email)
-            ?: throw invalidCredentials()
-
+        val account = accountRepository.findByEmailIgnoreCase(email) ?: throw InvalidCredentialsException()
         if (!passwordEncoder.matches(password, account.passwordHash)) {
-            throw invalidCredentials()
+            throw InvalidCredentialsException()
         }
 
         return buildSessionResponse(account)
     }
 
+    /** Issues a new access/refresh token pair from a refresh token. */
     fun refresh(request: RefreshRequest): AuthSessionResponse {
-        val session = tokenStore.refresh(request.refreshToken)
-            ?: throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_REFRESH_INVALID",
-                message = "Refresh token is invalid"
-            )
-
-        val account = accountRepository.findById(session.accountId)
-            ?: throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_UNAUTHORIZED",
-                message = "Account session is no longer valid"
-            )
+        val session = tokenStore.refresh(requireNotNull(request.refreshToken)) ?: throw RefreshTokenInvalidException()
+        val account = accountRepository.findById(session.accountId).orElseThrow { UnauthorizedException() }
 
         return AuthSessionResponse(
             account = account.toProfile(),
@@ -107,59 +88,51 @@ class AuthService(
         )
     }
 
+    /** Revokes the current access token session. */
     fun logout(authorizationHeader: String?) {
-        val account = requireAuthenticated(authorizationHeader)
         val token = extractBearerToken(authorizationHeader)
+        requireAuthenticated(authorizationHeader)
         tokenStore.revokeByAccess(token)
-        account
     }
 
+    /** Resolves the authenticated account from the Bearer token header. */
     fun requireAuthenticated(authorizationHeader: String?): AuthenticatedAccount {
         val token = extractBearerToken(authorizationHeader)
-        val session = tokenStore.resolveAccess(token)
-            ?: throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_UNAUTHORIZED",
-                message = "Access token is invalid"
-            )
-
-        val account = accountRepository.findById(session.accountId)
-            ?: throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_UNAUTHORIZED",
-                message = "Access token is invalid"
-            )
-
-        return AuthenticatedAccount(account.id, account.emailVerified)
+        val session = tokenStore.resolveAccess(token) ?: throw UnauthorizedException()
+        val account = accountRepository.findById(session.accountId).orElseThrow { UnauthorizedException() }
+        return AuthenticatedAccount(requireNotNull(account.id), account.emailVerifiedAt != null)
     }
 
+    /** Enforces verified-account access for protected business actions. */
     fun requireVerified(account: AuthenticatedAccount) {
         if (!account.emailVerified) {
-            throw ApiException(
-                status = HttpStatus.FORBIDDEN,
-                code = "EMAIL_NOT_VERIFIED",
-                message = "Email verification is required before this action"
-            )
+            throw EmailNotVerifiedException()
         }
     }
 
+    /** Returns the current authenticated account profile payload. */
     fun currentProfile(authorizationHeader: String?): AccountProfileResponse {
         val account = requireAuthenticated(authorizationHeader)
-        val record = accountRepository.findById(account.id)
-            ?: throw ApiException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "Access token is invalid")
-        return AccountProfileResponse(account = record.toProfile())
+        val entity = accountRepository.findById(account.id).orElseThrow { UnauthorizedException() }
+        return AccountProfileResponse(account = entity.toProfile())
     }
 
+    /** Applies supported preference fields and returns the updated profile payload. */
+    @Transactional
     fun updatePreferences(authorizationHeader: String?, request: UpdatePreferencesRequest): AccountProfileResponse {
         val account = requireAuthenticated(authorizationHeader)
-        accountRepository.updatePreferences(account.id, request.preferredCurrency, request.timezone)
-        val updated = accountRepository.findById(account.id)
-            ?: throw ApiException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "Access token is invalid")
+        val entity = accountRepository.findById(account.id).orElseThrow { UnauthorizedException() }
+
+        request.preferredCurrency?.let { entity.preferredCurrency = it }
+        entity.updatedAt = Instant.now()
+
+        val updated = accountRepository.save(entity)
         return AccountProfileResponse(account = updated.toProfile())
     }
 
-    private fun buildSessionResponse(account: AccountRecord): AuthSessionResponse {
-        val session = tokenStore.issue(account.id)
+    private fun buildSessionResponse(account: AccountEntity): AuthSessionResponse {
+        val accountId = requireNotNull(account.id)
+        val session = tokenStore.issue(accountId)
         return AuthSessionResponse(
             account = account.toProfile(),
             tokens = session.toTokens(tokenStore.accessTokenTtlSeconds())
@@ -169,29 +142,13 @@ class AuthService(
     private fun extractBearerToken(authorizationHeader: String?): String {
         val raw = authorizationHeader?.trim().orEmpty()
         if (!raw.startsWith("Bearer ", ignoreCase = true)) {
-            throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_UNAUTHORIZED",
-                message = "Authorization header is required"
-            )
+            throw UnauthorizedException("Authorization header is required")
         }
         val token = raw.substringAfter(' ').trim()
         if (token.isBlank()) {
-            throw ApiException(
-                status = HttpStatus.UNAUTHORIZED,
-                code = "AUTH_UNAUTHORIZED",
-                message = "Authorization header is required"
-            )
+            throw UnauthorizedException("Authorization header is required")
         }
         return token
-    }
-
-    private fun invalidCredentials(): ApiException {
-        return ApiException(
-            status = HttpStatus.UNAUTHORIZED,
-            code = "AUTH_INVALID_CREDENTIALS",
-            message = "Email or password is invalid"
-        )
     }
 
     private fun String.toUuidOrNull(): UUID? = try {
@@ -200,13 +157,13 @@ class AuthService(
         null
     }
 
-    private fun AccountRecord.toProfile(): AccountProfile {
+    private fun AccountEntity.toProfile(): AccountProfile {
         return AccountProfile(
-            id = id,
-            email = email,
-            name = name,
-            preferredCurrency = preferredCurrency,
-            emailVerified = emailVerified
+            id = requireNotNull(id),
+            email = requireNotNull(email),
+            name = requireNotNull(name),
+            preferredCurrency = requireNotNull(preferredCurrency),
+            emailVerified = emailVerifiedAt != null
         )
     }
 
