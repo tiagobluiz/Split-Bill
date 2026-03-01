@@ -4,6 +4,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import java.time.Instant
 import java.util.UUID
 
 @Entity
@@ -19,6 +20,15 @@ class EventPersonEntity(
     @Column(name = "display_name", nullable = false)
     var displayName: String? = null,
 
+    @Column(name = "linked_account_id")
+    var linkedAccountId: UUID? = null,
+
     @Column(name = "created_by_account_id", nullable = false)
-    var createdByAccountId: UUID? = null
+    var createdByAccountId: UUID? = null,
+
+    @Column(name = "created_at", nullable = false)
+    var createdAt: Instant? = null,
+
+    @Column(name = "updated_at", nullable = false)
+    var updatedAt: Instant? = null
 )

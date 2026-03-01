@@ -4,6 +4,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -16,7 +17,8 @@ data class AuthenticatedAccount(
 class AuthService(
     private val accountRepository: AccountRepository,
     private val tokenStore: AuthTokenStore,
-    private val passwordEncoder: PasswordEncoder
+    private val passwordEncoder: PasswordEncoder,
+    private val clock: Clock
 ) {
 
     /** Registers a new account and returns an authenticated session payload. */
@@ -39,7 +41,7 @@ class AuthService(
                     name = name,
                     preferredCurrency = "USD",
                     emailVerifiedAt = null,
-                    updatedAt = Instant.now()
+                    updatedAt = Instant.now(clock)
                 )
             )
         } catch (_: DataIntegrityViolationException) {
@@ -56,8 +58,8 @@ class AuthService(
 
         val account = accountRepository.findById(accountId).orElseThrow { VerificationTokenInvalidException() }
         if (account.emailVerifiedAt == null) {
-            account.emailVerifiedAt = Instant.now()
-            account.updatedAt = Instant.now()
+            account.emailVerifiedAt = Instant.now(clock)
+            account.updatedAt = Instant.now(clock)
             accountRepository.save(account)
         }
 
@@ -124,7 +126,7 @@ class AuthService(
         val entity = accountRepository.findById(account.id).orElseThrow { UnauthorizedException() }
 
         request.preferredCurrency?.let { entity.preferredCurrency = it }
-        entity.updatedAt = Instant.now()
+        entity.updatedAt = Instant.now(clock)
 
         val updated = accountRepository.save(entity)
         return AccountProfileResponse(account = updated.toProfile())

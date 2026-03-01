@@ -12,6 +12,7 @@ import com.splitbill.backend.events.EventPersonRepository
 import com.splitbill.backend.events.EventRepository
 import com.splitbill.backend.events.InviteTokenEntity
 import com.splitbill.backend.events.InviteTokenRepository
+import com.splitbill.backend.events.SettlementAlgorithm
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
@@ -27,6 +28,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.security.MessageDigest
+import java.time.Clock
 import java.time.Instant
 import java.util.UUID
 
@@ -39,7 +41,8 @@ class AuthAndVerificationIntegrationTests(
     @Autowired private val eventRepository: EventRepository,
     @Autowired private val eventCollaboratorRepository: EventCollaboratorRepository,
     @Autowired private val eventPersonRepository: EventPersonRepository,
-    @Autowired private val inviteTokenRepository: InviteTokenRepository
+    @Autowired private val inviteTokenRepository: InviteTokenRepository,
+    @Autowired private val clock: Clock
 ) {
 
     private val objectMapper = ObjectMapper().findAndRegisterModules()
@@ -280,15 +283,15 @@ class AuthAndVerificationIntegrationTests(
                 passwordHash = "seeded-hash",
                 name = "Seeded Account",
                 preferredCurrency = "USD",
-                emailVerifiedAt = Instant.now(),
-                updatedAt = Instant.now()
+                emailVerifiedAt = Instant.now(clock),
+                updatedAt = Instant.now(clock)
             )
         )
         return requireNotNull(account.id)
     }
 
     private fun insertEvent(ownerId: UUID): UUID {
-        val now = Instant.now()
+        val now = Instant.now(clock)
         val event = eventRepository.save(
             EventEntity(
                 id = UUID.randomUUID(),
@@ -296,7 +299,7 @@ class AuthAndVerificationIntegrationTests(
                 name = "Seeded Event",
                 baseCurrency = "USD",
                 timezone = "UTC",
-                defaultSettlementAlgorithm = "MIN_TRANSFER",
+                defaultSettlementAlgorithm = SettlementAlgorithm.MIN_TRANSFER,
                 createdAt = now,
                 updatedAt = now
             )
@@ -315,12 +318,15 @@ class AuthAndVerificationIntegrationTests(
     }
 
     private fun insertEventPerson(eventId: UUID, createdBy: UUID): UUID {
+        val now = Instant.now(clock)
         val person = eventPersonRepository.save(
             EventPersonEntity(
                 id = UUID.randomUUID(),
                 eventId = eventId,
                 displayName = "Seeded Person",
-                createdByAccountId = createdBy
+                createdByAccountId = createdBy,
+                createdAt = now,
+                updatedAt = now
             )
         )
         return requireNotNull(person.id)
