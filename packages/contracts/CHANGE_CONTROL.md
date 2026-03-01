@@ -10,6 +10,7 @@
 1. Regenerate API docs/SDKs/mock assets.
 2. Commit regenerated artifacts in the same PR or open a linked follow-up PR.
 3. Run generation and contract validation checks (`npm run contracts:check`) before merge.
+4. For TypeScript client artifacts, use `npm run generate:ts-client --workspace @split-bill/contracts`.
 - Any breaking change requires an explicit exception PR with:
 1. `BREAKING CONTRACT CHANGE` in PR title.
 2. A migration note in this file under "Approved Exceptions".
