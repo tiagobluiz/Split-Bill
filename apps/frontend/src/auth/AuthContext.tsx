@@ -8,16 +8,24 @@ export type AuthSession = {
   displayName: string;
 };
 
+export type SignInPayload = {
+  email: string;
+  password: string;
+  keepSignedIn: boolean;
+};
+
 type AuthContextValue = {
   session: AuthSession | null;
-  signIn: (email: string) => void;
+  signIn: (payload: SignInPayload) => void;
   signOut: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function readStoredSession(): AuthSession | null {
-  const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+  const raw =
+    window.localStorage.getItem(AUTH_STORAGE_KEY) ??
+    window.sessionStorage.getItem(AUTH_STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -39,15 +47,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      signIn: (email: string) => {
+      signIn: ({ email, keepSignedIn }: SignInPayload) => {
         const normalized = email.trim().toLowerCase();
         const displayName = normalized.split("@")[0] || "Member";
         const nextSession = { email: normalized, displayName };
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+        const storage = keepSignedIn ? window.localStorage : window.sessionStorage;
+        const fallbackStorage = keepSignedIn ? window.sessionStorage : window.localStorage;
+        storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+        fallbackStorage.removeItem(AUTH_STORAGE_KEY);
         setSession(nextSession);
       },
       signOut: () => {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
         setSession(null);
       }
     }),

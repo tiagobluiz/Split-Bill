@@ -29,6 +29,7 @@ type SignInValues = z.infer<typeof signInSchema>;
 export function SignInPage() {
   const { signIn } = useAuth();
   const [showEmailVerificationWarning, setShowEmailVerificationWarning] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | undefined)?.from ?? "/app/dashboard";
@@ -49,11 +50,19 @@ export function SignInPage() {
   const onSubmit = async (values: SignInValues) => {
     try {
       setShowEmailVerificationWarning(false);
-      await Promise.resolve(signIn(values.email));
+      setAuthError(null);
+      await Promise.resolve(signIn(values));
       navigate(from, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message.toLowerCase() : "";
-      setShowEmailVerificationWarning(message.includes("not verified"));
+      if (message.includes("not verified")) {
+        setShowEmailVerificationWarning(true);
+        setAuthError(null);
+        return;
+      }
+
+      setShowEmailVerificationWarning(false);
+      setAuthError("Could not sign in. Check your credentials and try again.");
     }
   };
 
@@ -72,6 +81,7 @@ export function SignInPage() {
             {showEmailVerificationWarning ? (
               <Alert severity="warning">Email not verified. Verify your email before joining events.</Alert>
             ) : null}
+            {authError ? <Alert severity="error">{authError}</Alert> : null}
 
             <Box component="form" noValidate onSubmit={handleSubmit(onSubmit)}>
               <Stack spacing={2}>
