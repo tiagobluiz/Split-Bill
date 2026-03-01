@@ -10,7 +10,10 @@ import java.time.Instant
 import java.util.UUID
 
 enum class SettlementAlgorithm {
+    /** Minimizes number of transfers across participants. */
     MIN_TRANSFER,
+
+    /** Computes direct pairwise settlements without transfer minimization. */
     PAIRWISE
 }
 
@@ -28,8 +31,10 @@ data class CreateEventRequest(
 )
 
 data class UpdateEventRequest(
+    @field:Pattern(regexp = "^(?!\\s*$).+$")
     @field:Size(max = 160)
     val name: String? = null,
+    @field:Pattern(regexp = "^(?!\\s*$).+$")
     @field:Size(max = 64)
     val timezone: String? = null,
     val defaultSettlementAlgorithm: SettlementAlgorithm? = null
@@ -75,6 +80,7 @@ data class CreatePersonRequest(
 )
 
 data class UpdatePersonRequest(
+    @field:Pattern(regexp = "^(?!\\s*$).+$")
     @field:Size(max = 120)
     val displayName: String? = null,
     val linkedAccountId: UUID? = null

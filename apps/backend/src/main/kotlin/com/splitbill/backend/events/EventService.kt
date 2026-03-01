@@ -27,7 +27,7 @@ class EventService(
                 name = request.name,
                 baseCurrency = request.baseCurrency,
                 timezone = request.timezone,
-                defaultSettlementAlgorithm = (request.defaultSettlementAlgorithm ?: SettlementAlgorithm.MIN_TRANSFER).name,
+                defaultSettlementAlgorithm = request.defaultSettlementAlgorithm ?: SettlementAlgorithm.MIN_TRANSFER,
                 createdAt = now,
                 updatedAt = now
             )
@@ -103,7 +103,7 @@ class EventService(
 
         request.name?.let { event.name = it }
         request.timezone?.let { event.timezone = it }
-        request.defaultSettlementAlgorithm?.let { event.defaultSettlementAlgorithm = it.name }
+        request.defaultSettlementAlgorithm?.let { event.defaultSettlementAlgorithm = it }
         event.updatedAt = Instant.now(clock)
 
         return EventResponse(event = eventRepository.save(event).toDto())
@@ -152,7 +152,7 @@ class EventService(
         val person = eventPersonRepository.findByIdAndEventId(personId, eventId) ?: throw PersonNotFoundException()
 
         request.displayName?.let { person.displayName = it }
-        if (request.linkedAccountId != null || request.displayName == null) {
+        if (request.linkedAccountId != null) {
             person.linkedAccountId = request.linkedAccountId
         }
         person.updatedAt = Instant.now(clock)
@@ -215,7 +215,7 @@ class EventService(
             name = requireNotNull(name),
             baseCurrency = requireNotNull(baseCurrency),
             timezone = requireNotNull(timezone),
-            defaultSettlementAlgorithm = SettlementAlgorithm.valueOf(requireNotNull(defaultSettlementAlgorithm))
+            defaultSettlementAlgorithm = requireNotNull(defaultSettlementAlgorithm)
         )
     }
 

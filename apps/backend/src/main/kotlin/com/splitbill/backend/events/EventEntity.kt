@@ -2,6 +2,8 @@ package com.splitbill.backend.events
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
@@ -26,8 +28,9 @@ class EventEntity(
     @Column(name = "timezone", nullable = false)
     var timezone: String? = null,
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "default_settlement_algorithm", nullable = false)
-    var defaultSettlementAlgorithm: String? = null,
+    var defaultSettlementAlgorithm: SettlementAlgorithm? = null,
 
     @Column(name = "created_at", nullable = false)
     var createdAt: Instant? = null,

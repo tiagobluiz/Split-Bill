@@ -12,6 +12,7 @@ import com.splitbill.backend.events.EventPersonRepository
 import com.splitbill.backend.events.EventRepository
 import com.splitbill.backend.events.InviteTokenEntity
 import com.splitbill.backend.events.InviteTokenRepository
+import com.splitbill.backend.events.SettlementAlgorithm
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
@@ -298,7 +299,7 @@ class AuthAndVerificationIntegrationTests(
                 name = "Seeded Event",
                 baseCurrency = "USD",
                 timezone = "UTC",
-                defaultSettlementAlgorithm = "MIN_TRANSFER",
+                defaultSettlementAlgorithm = SettlementAlgorithm.MIN_TRANSFER,
                 createdAt = now,
                 updatedAt = now
             )
