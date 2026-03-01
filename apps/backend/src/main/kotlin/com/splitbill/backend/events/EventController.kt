@@ -20,6 +20,7 @@ import java.util.UUID
 @RestController
 class EventController(
     private val eventService: EventService,
+    private val entryService: EntryService,
     private val authService: AuthService
 ) {
 
@@ -104,5 +105,57 @@ class EventController(
         val account = authService.requireAuthenticated(authorizationHeader)
         authService.requireVerified(account)
         return eventService.joinInvite(account.id, token, request)
+    }
+
+    @PostMapping("/events/{eventId}/entries")
+    @ResponseStatus(HttpStatus.CREATED)
+    fun createEntry(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID,
+        @Valid @RequestBody request: CreateEntryRequest
+    ): EntryResponse {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return entryService.createEntry(account.id, eventId, request)
+    }
+
+    @GetMapping("/events/{eventId}/entries")
+    fun listEntries(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID
+    ): EntryListResponse {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return entryService.listEntries(account.id, eventId)
+    }
+
+    @GetMapping("/events/{eventId}/entries/{entryId}")
+    fun getEntry(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID,
+        @PathVariable entryId: UUID
+    ): EntryResponse {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return entryService.getEntry(account.id, eventId, entryId)
+    }
+
+    @PatchMapping("/events/{eventId}/entries/{entryId}")
+    fun updateEntry(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID,
+        @PathVariable entryId: UUID,
+        @Valid @RequestBody request: UpdateEntryRequest
+    ): EntryResponse {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        return entryService.updateEntry(account.id, eventId, entryId, request)
+    }
+
+    @DeleteMapping("/events/{eventId}/entries/{entryId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteEntry(
+        @RequestHeader("Authorization", required = false) authorizationHeader: String?,
+        @PathVariable eventId: UUID,
+        @PathVariable entryId: UUID
+    ) {
+        val account = authService.requireAuthenticated(authorizationHeader)
+        entryService.deleteEntry(account.id, eventId, entryId)
     }
 }

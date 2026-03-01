@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.splitbill.backend.auth.AccountEntity
 import com.splitbill.backend.auth.AccountRepository
+import com.splitbill.backend.events.BalanceSnapshotRepository
+import com.splitbill.backend.events.EntryParticipantRepository
+import com.splitbill.backend.events.EntryRepository
 import com.splitbill.backend.events.EventCollaboratorEntity
 import com.splitbill.backend.events.EventCollaboratorRepository
 import com.splitbill.backend.events.EventEntity
@@ -42,6 +45,9 @@ class AuthAndVerificationIntegrationTests(
     @Autowired private val eventCollaboratorRepository: EventCollaboratorRepository,
     @Autowired private val eventPersonRepository: EventPersonRepository,
     @Autowired private val inviteTokenRepository: InviteTokenRepository,
+    @Autowired private val entryRepository: EntryRepository,
+    @Autowired private val entryParticipantRepository: EntryParticipantRepository,
+    @Autowired private val balanceSnapshotRepository: BalanceSnapshotRepository,
     @Autowired private val clock: Clock
 ) {
 
@@ -49,6 +55,9 @@ class AuthAndVerificationIntegrationTests(
 
     @BeforeEach
     fun setup() {
+        entryParticipantRepository.deleteAllInBatch()
+        entryRepository.deleteAllInBatch()
+        balanceSnapshotRepository.deleteAllInBatch()
         eventCollaboratorRepository.deleteAllInBatch()
         eventPersonRepository.deleteAllInBatch()
         inviteTokenRepository.deleteAllInBatch()
