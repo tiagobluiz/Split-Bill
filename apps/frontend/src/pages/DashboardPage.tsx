@@ -24,12 +24,17 @@ export function DashboardPage() {
       <PageZone title="Filters">
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
           <TextField label="Search events" placeholder="Search events" fullWidth />
-          <Select size="small" defaultValue="all" sx={{ minWidth: 130 }}>
+          <Select size="small" defaultValue="all" sx={{ minWidth: 130 }} inputProps={{ "aria-label": "Status filter" }}>
             <MenuItem value="all">All</MenuItem>
             <MenuItem value="active">Active</MenuItem>
             <MenuItem value="archived">Archived</MenuItem>
           </Select>
-          <Select size="small" defaultValue="usd" sx={{ minWidth: 130 }}>
+          <Select
+            size="small"
+            defaultValue="usd"
+            sx={{ minWidth: 130 }}
+            inputProps={{ "aria-label": "Currency filter" }}
+          >
             <MenuItem value="usd">USD ($)</MenuItem>
             <MenuItem value="eur">EUR (€)</MenuItem>
           </Select>
@@ -82,3 +87,4 @@ export function DashboardPage() {
     </Stack>
   );
 }
+

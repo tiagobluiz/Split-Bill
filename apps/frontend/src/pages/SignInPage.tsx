@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
+import { useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../auth/AuthContext";
@@ -27,6 +28,7 @@ type SignInValues = z.infer<typeof signInSchema>;
 
 export function SignInPage() {
   const { signIn } = useAuth();
+  const [showEmailVerificationWarning, setShowEmailVerificationWarning] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | undefined)?.from ?? "/app/dashboard";
@@ -45,8 +47,14 @@ export function SignInPage() {
   });
 
   const onSubmit = async (values: SignInValues) => {
-    signIn(values.email);
-    navigate(from, { replace: true });
+    try {
+      setShowEmailVerificationWarning(false);
+      await Promise.resolve(signIn(values.email));
+      navigate(from, { replace: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : "";
+      setShowEmailVerificationWarning(message.includes("not verified"));
+    }
   };
 
   return (
@@ -61,7 +69,9 @@ export function SignInPage() {
               <Typography color="text.secondary">Access your events and split history.</Typography>
             </Box>
 
-            <Alert severity="warning">Email not verified. Verify your email before joining events.</Alert>
+            {showEmailVerificationWarning ? (
+              <Alert severity="warning">Email not verified. Verify your email before joining events.</Alert>
+            ) : null}
 
             <Box component="form" noValidate onSubmit={handleSubmit(onSubmit)}>
               <Stack spacing={2}>

@@ -43,13 +43,13 @@ export function LandingPage() {
               Split-Bill
             </Typography>
             <Stack direction="row" spacing={3}>
-              <Link href="#" underline="hover" color="text.secondary">
+              <Link href="#features" underline="hover" color="text.secondary">
                 Features
               </Link>
-              <Link href="#" underline="hover" color="text.secondary">
+              <Link href="#how-it-works" underline="hover" color="text.secondary">
                 How it works
               </Link>
-              <Link href="#" underline="hover" color="text.secondary">
+              <Link href="#security" underline="hover" color="text.secondary">
                 Security
               </Link>
               <Link component={RouterLink} to="/sign-in" underline="hover" color="text.primary">
@@ -58,7 +58,7 @@ export function LandingPage() {
             </Stack>
           </Box>
 
-          <Box textAlign="center">
+          <Box id="how-it-works" textAlign="center">
             <Typography variant="h3" component="h1" fontWeight={700} sx={{ mb: 1.5 }}>
               Split-Bill keeps your shared expenses organized.
             </Typography>
@@ -95,7 +95,7 @@ export function LandingPage() {
             </Typography>
           </Box>
 
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+          <Stack id="features" direction={{ xs: "column", md: "row" }} spacing={2}>
             {features.map((feature) => (
               <Card key={feature.title} sx={{ flex: 1, border: "1px solid #F3E4DA", boxShadow: 2 }}>
                 <CardContent>
@@ -108,7 +108,7 @@ export function LandingPage() {
             ))}
           </Stack>
 
-          <Typography textAlign="center" fontStyle="italic" color="text.secondary">
+          <Typography id="security" textAlign="center" fontStyle="italic" color="text.secondary">
             Used for trips, shared homes, and group dinners across Europe.
           </Typography>
         </Stack>
