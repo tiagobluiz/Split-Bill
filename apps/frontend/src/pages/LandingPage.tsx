@@ -101,20 +101,6 @@ export function LandingPage() {
               </Link>{" "}
               | Sign in to see your events and history.
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                display: "inline-block",
-                mt: 2,
-                px: 2,
-                py: 1,
-                borderRadius: "999px",
-                bgcolor: "#FFF1E7",
-                border: "1px solid #F3E4DA"
-              }}
-            >
-              Welcome back. Your events are waiting for you.
-            </Typography>
           </Box>
 
           <Stack id="features" direction={{ xs: "column", md: "row" }} spacing={2}>
