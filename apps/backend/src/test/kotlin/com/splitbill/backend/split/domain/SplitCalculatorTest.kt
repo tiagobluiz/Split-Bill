@@ -169,6 +169,29 @@ class SplitCalculatorTest {
         }
     }
 
+    @Test
+    fun `request keeps defensive copy when source participant list is mutated`() {
+        val source = mutableListOf<ParticipantSplitInstruction>(
+            EvenSplitInstruction(pid(1)),
+            EvenSplitInstruction(pid(2))
+        )
+        val request = SplitCalculationRequest.of(
+            totalAmount = DecimalAmount.of(BigDecimal("2.0000")),
+            currency = CurrencyCode.of("USD"),
+            participantSplits = source
+        )
+
+        source.clear()
+        source += AmountSplitInstruction(pid(1), DecimalAmount.of(BigDecimal("2.0000")))
+
+        assertEquals(2, request.participantSplits.size)
+        assertTrue(request.participantSplits.all { it is EvenSplitInstruction })
+        assertEquals(SplitMode.EVEN, request.mode)
+
+        val result = calculator.calculate(request)
+        assertEquals("2.0000", result.allocations.sumOf { it.amount.value }.toPlainString())
+    }
+
     private fun pid(index: Int): ParticipantId {
         return ParticipantId.of(UUID.fromString("00000000-0000-0000-0000-00000000000$index"))
     }

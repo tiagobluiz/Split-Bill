@@ -110,29 +110,30 @@ class SplitCalculationRequest private constructor(
             currency: CurrencyCode,
             participantSplits: List<ParticipantSplitInstruction>
         ): SplitCalculationRequest {
+            val immutableParticipantSplits = participantSplits.toList()
             val violations = mutableListOf<String>()
 
             if (totalAmount.value <= BigDecimal.ZERO) {
                 violations += "total amount must be greater than zero"
             }
-            if (participantSplits.isEmpty()) {
+            if (immutableParticipantSplits.isEmpty()) {
                 violations += "at least one participant split is required"
             }
 
-            val distinctIds = participantSplits.map { it.participantId.value }.toSet().size
-            if (distinctIds != participantSplits.size) {
+            val distinctIds = immutableParticipantSplits.map { it.participantId.value }.toSet().size
+            if (distinctIds != immutableParticipantSplits.size) {
                 violations += "participant ids must be unique"
             }
 
-            val modes = participantSplits.map { it.mode }.toSet()
+            val modes = immutableParticipantSplits.map { it.mode }.toSet()
             if (modes.size > 1) {
                 violations += "all participant splits must use the same split mode"
             }
 
             if (modes.size == 1) {
                 when (modes.first()) {
-                    SplitMode.PERCENT -> validatePercentMode(participantSplits, violations)
-                    SplitMode.AMOUNT -> validateAmountMode(totalAmount, participantSplits, violations)
+                    SplitMode.PERCENT -> validatePercentMode(immutableParticipantSplits, violations)
+                    SplitMode.AMOUNT -> validateAmountMode(totalAmount, immutableParticipantSplits, violations)
                     SplitMode.EVEN -> Unit
                 }
             }
@@ -144,8 +145,8 @@ class SplitCalculationRequest private constructor(
             return SplitCalculationRequest(
                 totalAmount = totalAmount,
                 currency = currency,
-                mode = participantSplits.first().mode,
-                participantSplits = participantSplits
+                mode = immutableParticipantSplits.first().mode,
+                participantSplits = immutableParticipantSplits
             )
         }
 

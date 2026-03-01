@@ -93,13 +93,15 @@ class SplitCalculator {
     }
 
     private fun toUnits(value: BigDecimal): Long {
+        val scale = DecimalAmount.SCALE
         return value
-            .setScale(4, RoundingMode.UNNECESSARY)
-            .movePointRight(4)
+            .setScale(scale, RoundingMode.UNNECESSARY)
+            .movePointRight(scale)
             .longValueExact()
     }
 
     private fun fromUnits(units: Long): BigDecimal {
-        return BigDecimal(units).movePointLeft(4).setScale(4, RoundingMode.UNNECESSARY)
+        val scale = DecimalAmount.SCALE
+        return BigDecimal(units).movePointLeft(scale).setScale(scale, RoundingMode.UNNECESSARY)
     }
 }
