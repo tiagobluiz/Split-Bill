@@ -1,0 +1,6 @@
+{
+  "generatorImage": "openapitools/openapi-generator-cli:v7.13.0",
+  "inputSpec": "openapi/openapi.v1.yaml",
+  "inputSpecSha256": "bb845611b24d598cf1d5c5c7696e235d6d9d864c6c6939e96bf662a6deeecdf5",
+  "output": "generated/typescript-fetch"
+}

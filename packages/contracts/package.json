@@ -1,0 +1,9 @@
+{
+  "name": "@split-bill/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:ts-client": "node ./scripts/generate-ts-client.mjs"
+  }
+}
