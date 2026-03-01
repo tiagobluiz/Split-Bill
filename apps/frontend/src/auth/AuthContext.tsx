@@ -47,7 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      signIn: ({ email, keepSignedIn }: SignInPayload) => {
+      signIn: ({ email, password, keepSignedIn }: SignInPayload) => {
+        // Mock auth for SB-016. Replace with API credential validation in auth implementation issue.
+        void password;
         const normalized = email.trim().toLowerCase();
         const displayName = normalized.split("@")[0] || "Member";
         const nextSession = { email: normalized, displayName };
