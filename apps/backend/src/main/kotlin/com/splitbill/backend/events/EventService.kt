@@ -3,6 +3,7 @@ package com.splitbill.backend.events
 import com.splitbill.backend.auth.AuthService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -57,13 +58,16 @@ class EventService(
         val account = authService.requireAuthenticated(authorizationHeader)
         authService.requireVerified(account)
 
-        val invite = inviteTokenRepository.findByTokenHashAndRevokedAtIsNull(token) ?: throw InviteNotFoundException()
-        if (invite.expiresAt != null && invite.expiresAt!!.isBefore(Instant.now())) {
+        val invite = inviteTokenRepository.findByTokenHashAndRevokedAtIsNull(hashInviteToken(token))
+            ?: throw InviteNotFoundException()
+
+        val now = Instant.now()
+        if (invite.expiresAt != null && !invite.expiresAt!!.isAfter(now)) {
             throw InviteNotFoundException()
         }
 
         val eventId = requireNotNull(invite.eventId)
-        val personId = requireNotNull(request.personId)
+        val personId = request.personId
         if (!eventPersonRepository.existsByIdAndEventId(personId, eventId)) {
             throw PersonNotFoundException()
         }
@@ -92,5 +96,10 @@ class EventService(
             timezone = requireNotNull(timezone),
             defaultSettlementAlgorithm = requireNotNull(defaultSettlementAlgorithm)
         )
+    }
+
+    private fun hashInviteToken(rawToken: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(rawToken.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }

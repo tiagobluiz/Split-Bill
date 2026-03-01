@@ -62,6 +62,7 @@ data class MessageResponse(
 data class UpdatePreferencesRequest(
     @field:Pattern(regexp = "^[A-Z]{3}$")
     val preferredCurrency: String? = null,
+    @field:Size(max = 64)
     val timezone: String? = null
 )
 

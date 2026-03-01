@@ -29,7 +29,7 @@ class RefreshTokenInvalidException : ApiException(
 
 class VerificationTokenInvalidException : ApiException(
     status = HttpStatus.NOT_FOUND,
-    code = "ACCOUNT_NOT_FOUND",
+    code = "AUTH_VERIFICATION_INVALID",
     message = "Verification token is invalid"
 )
 

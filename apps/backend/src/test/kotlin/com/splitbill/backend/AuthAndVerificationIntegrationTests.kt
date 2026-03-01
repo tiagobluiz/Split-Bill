@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -330,11 +331,16 @@ class AuthAndVerificationIntegrationTests(
             InviteTokenEntity(
                 id = UUID.randomUUID(),
                 eventId = eventId,
-                tokenHash = token,
+                tokenHash = hashInviteToken(token),
                 createdByAccountId = createdBy
             )
         )
     }
 
     private fun json(payload: Any): String = objectMapper.writeValueAsString(payload)
+
+    private fun hashInviteToken(rawToken: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(rawToken.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
 }

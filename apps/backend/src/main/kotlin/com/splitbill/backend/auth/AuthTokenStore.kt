@@ -38,7 +38,14 @@ class AuthTokenStore {
     }
 
     fun refresh(refreshToken: String): TokenSession? {
-        val existing = refreshIndex.remove(refreshToken) ?: return null
+        val existing = refreshIndex[refreshToken] ?: return null
+        if (!existing.expiresAt.isAfter(Instant.now())) {
+            refreshIndex.remove(refreshToken)
+            accessIndex.remove(existing.accessToken)
+            return null
+        }
+
+        refreshIndex.remove(refreshToken)
         accessIndex.remove(existing.accessToken)
         return issue(existing.accountId)
     }

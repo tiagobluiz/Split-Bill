@@ -4,11 +4,20 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 import java.time.Instant
 import java.util.UUID
 
 @Entity
-@Table(name = "event_collaborators")
+@Table(
+    name = "event_collaborators",
+    uniqueConstraints = [
+        UniqueConstraint(
+            name = "uq_event_collaborators_event_account",
+            columnNames = ["event_id", "account_id"]
+        )
+    ]
+)
 class EventCollaboratorEntity(
     @Id
     @Column(name = "id", nullable = false)
