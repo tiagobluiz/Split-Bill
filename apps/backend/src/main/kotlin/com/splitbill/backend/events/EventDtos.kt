@@ -107,6 +107,30 @@ data class JoinInviteResponse(
     val personId: UUID
 )
 
+data class MoneyDto(
+    val amount: String,
+    val currency: String
+)
+
+data class BalanceCounterpartyAmountDto(
+    val counterpartyPersonId: UUID,
+    val amount: MoneyDto
+)
+
+data class BalanceDto(
+    val personId: UUID,
+    val netAmountInEventCurrency: String,
+    val owes: List<BalanceCounterpartyAmountDto>,
+    val owedBy: List<BalanceCounterpartyAmountDto>
+)
+
+data class BalancesResponse(
+    val eventId: UUID,
+    val currency: String,
+    val algorithm: SettlementAlgorithm,
+    val balances: List<BalanceDto>
+)
+
 data class PageParams(
     @field:Min(1)
     val page: Int = 1,
