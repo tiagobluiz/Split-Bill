@@ -1,6 +1,6 @@
 # Backend Workspace
 
-Placeholder backend workspace for SB-005+ implementation.
+Kotlin/Spring backend for Split-Bill.
 
 ## Local Dev
 
@@ -8,6 +8,16 @@ Run from repository root:
 
 - `npm run dev`
 
-The bootstrap server exposes:
+Or from this directory:
 
-- `GET /health` on port `8080`.
+- `./gradlew bootRun`
+
+## Testing
+
+- `./gradlew test`
+
+## Database Migrations
+
+Flyway migrations are stored at:
+
+- `src/main/resources/db/migration`
