@@ -7,13 +7,11 @@ This file defines default operating rules for any agent session in this reposito
 - Prefer small, verifiable changes over large risky batches.
 - Keep decisions explicit in code, tests, and docs.
 
-## 2) Execution Queue Mode
-Queue mode supports two profiles:
-- Backend queue profile.
-- Frontend queue profile.
+## 2) Unified Queue Mode
+Queue mode uses a single queue across disciplines.
 
 Activation convention:
-- User explicitly says `Start BE queue` or `Start FE queue`.
+- User explicitly says `Start queue`.
 - Run continuously until blocked by missing requirements or non-recoverable tooling errors.
 
 Shared cycle (every iteration):
@@ -25,17 +23,16 @@ Shared cycle (every iteration):
 6. Publish cycle summary.
 
 ### 2.1 Issue Selection Strategy
-- Source of truth for scope is issue labels:
-- Backend queue picks issues labeled `backend`.
-- Frontend queue picks issues labeled `frontend`.
-- If an issue has both labels, it is cross-cutting and must be split or blocked behind a `contracts` issue.
+- Source of truth for scope is issue labels.
+- Eligible queue labels are `backend`, `frontend`, and `contracts`.
+- If an issue has more than one discipline label, it is cross-cutting and must be split into discipline-specific issues, or blocked behind an explicit `contracts` issue when contract alignment is required.
 - No priority labels are used in this repository. Pick order is:
 1. Dependency-ready issues first (parse `Depends On` section in issue body; all dependencies must be closed).
 2. Earliest milestone first (`M1` -> `M2` -> `M3` -> `M4` -> no milestone).
 3. Oldest issue number first.
 
 ### 2.2 PR Maintenance Rules
-- Check open PRs in active scope at the start of each cycle.
+- Check open PRs in active discipline scope at the start of each cycle.
 - Auto-merge PR only when:
 - required approvals are present;
 - required checks are green;
@@ -54,32 +51,34 @@ Shared cycle (every iteration):
 - Keep issue status and PR links synchronized after every cycle.
 
 ### 2.4 Comment Triage Rules
-- Before new implementation work, process unanswered review comments in open PRs for the active scope.
+- Before new implementation work, process unanswered review comments in open PRs for the active discipline scope.
 - For valid comments:
 - implement fix;
 - run relevant checks;
 - push update.
 - Do not post self-review comments.
 
-### 2.5 Backend Queue Profile
+### 2.5 Discipline-Specific Rules
+- Exactly one discipline is active per cycle or batch: `backend`, `frontend`, or `contracts`.
+- Batch runs are allowed only for very small-scope issues and must remain single-discipline.
+- If the next queued issue is a different discipline, close the current batch and start a new cycle.
+
+Backend discipline:
 - Scope boundary: edit `apps/backend/**` only.
 - Allowed shared edits: root docs/config only when strictly required by backend change.
 - If API contract changes are needed:
 - require/update corresponding `contracts` issue first;
-- stop backend-only flow until contract alignment is explicit.
-- Batch sizing:
-- target up to 5 related issues;
-- allow up to 7 only when tightly coupled and low conflict risk.
+- stop backend flow until contract alignment is explicit.
 - Mandatory checks:
 - `cd apps/backend`
 - `./gradlew test`
 
-### 2.6 Frontend Queue Profile
+Frontend discipline:
 - Scope boundary: edit `apps/frontend/**` only.
 - Allowed shared edits: root docs/config only when strictly required by frontend change.
 - If BE/API contract changes are needed:
 - require/update corresponding `contracts` issue first;
-- pause FE-only flow until contract alignment is explicit.
+- pause frontend flow until contract alignment is explicit.
 - Mandatory UX governance pre-check (before implementation and before PR update):
 - read `/docs/frontend/ux-guidelines-v1.md` completely;
 - read `/docs/frontend/ux-render-prompts-v1.md` and identify applicable screen prompts;
@@ -92,16 +91,21 @@ Shared cycle (every iteration):
 - React Hook Form for forms;
 - Zod for validation.
 - Every delivered FE screen must be production-ready (no POC mode).
-- Batch sizing:
-- target up to 5 related issues;
-- allow up to 7 only when tightly coupled and low conflict risk.
 - Mandatory checks:
 - `cd apps/frontend`
 - `npm run lint`
 - `npm run test:run`
 - `npm run build`
 
-### 2.7 Testing Depth Requirement (both profiles)
+Contracts discipline:
+- Scope boundary: edit `packages/contracts/**` only.
+- Allowed shared edits: generated artifacts and root docs/config only when strictly required by contract change.
+- If backend/frontend implementation is needed after contract updates:
+- create or update corresponding discipline issues and stop contracts-only implementation at contract boundary.
+- Mandatory checks:
+- `npm run contracts:check`
+
+### 2.6 Testing Depth Requirement (all disciplines)
 - Every change must include matrix-oriented coverage:
 - happy paths;
 - edge cases;
@@ -111,7 +115,8 @@ Shared cycle (every iteration):
 - regression checks.
 - Backend must include controller-level integration coverage for affected endpoints.
 
-### 2.8 Cycle Output Format
+### 2.7 Cycle Output Format
+- Discipline per picked issue or batch (`backend`, `frontend`, or `contracts`).
 - Issues picked.
 - Changes made.
 - Tests run with results.
@@ -119,7 +124,7 @@ Shared cycle (every iteration):
 - Merge actions performed.
 - Issue close actions performed.
 
-### 2.9 Governance
+### 2.8 Governance
 - Never use destructive git actions (`reset --hard`, forced history rewrite) unless explicitly requested.
 - Keep one active delivery PR per scope unless grouped issue batch requires a shared PR.
 - Stop only for true blockers and report blocker + concrete next options.
@@ -187,3 +192,65 @@ Shared cycle (every iteration):
 - Documentation updated (as applicable).
 - CI green.
 - Issue/PR traceability preserved.
+
+## 10) Full-Access Safety Guardrails
+- These guardrails apply when the agent runs with full filesystem/command access.
+- Safety-first default: if a command is potentially destructive, stop and require explicit user approval.
+
+### 10.1 Hard Denylist
+- Never run destructive filesystem commands by default:
+- `rm -rf`
+- `del /f /s /q`
+- `rmdir /s /q`
+- `Remove-Item -Recurse -Force`
+- Never run disk/system-destructive commands:
+- `mkfs*`
+- `format`
+- `diskpart`
+- `dd`
+- `bcdedit`
+- mass registry edits
+- Never run destructive git history/data wipe commands by default:
+- `git reset --hard`
+- `git clean -fdx`
+- forced history rewrite pushes.
+
+### 10.2 Workspace Boundary
+- Only read/write inside repository root unless the user explicitly approves a one-off command outside it.
+- Never modify OS-level configuration, startup items, shell profiles, or global toolchain state unless explicitly requested and approved.
+
+### 10.3 Two-Step Confirmation for Risky Actions
+- For risky operations (history rewrite, mass delete, data wipe, uninstall, infra teardown):
+- show the exact command and impacted paths first;
+- wait for explicit user confirmation phrase: `APPROVE RISKY COMMAND`;
+- execute only that approved command.
+
+### 10.4 Delete and Overwrite Safety
+- No recursive delete and no wildcard delete without explicit approval.
+- Before any delete/overwrite, list exact target files/paths.
+- Prefer reversible actions first (rename, backup, stash, or move to trash where available).
+
+### 10.5 Git Safety Defaults
+- Prefer additive commits and non-destructive merges.
+- Never rewrite published history unless explicitly requested.
+- Always show current branch and `git status --short` before and after risky git operations.
+
+### 10.6 Execution Controls
+- Prefer non-interactive commands with explicit flags.
+- Use bounded timeouts for long-running commands.
+- If an unexpected prompt/conflict appears, stop and ask before proceeding.
+
+### 10.7 Secret and Credential Protection
+- Never print secret files or full credential values in logs/output.
+- Redact tokens, passwords, and keys in any surfaced command output.
+- Never post secrets to PRs, issues, comments, or commit messages.
+
+### 10.8 Safety Checkpoint
+- Before large or high-impact changes, create a reversible checkpoint (for example stash or safety branch) and report it.
+
+### 10.9 Network and Install Constraints
+- Do not run remote script pipes (for example `curl ... | sh`) without explicit approval.
+- Do not perform global installs or system package-manager changes unless explicitly requested and approved.
+
+### 10.10 Incident Rule
+- If unexpected filesystem changes or suspicious command effects are detected, stop immediately and ask the user how to proceed.
