@@ -5,6 +5,16 @@ import java.util.UUID
 import kotlin.math.min
 
 @Component
+/**
+ * Produces settlements by iterating debtors and paying creditors in deterministic id order.
+ *
+ * Input:
+ * - net balances where positive amounts are creditors and negative amounts are debtors.
+ *
+ * Output:
+ * - transfer list that fully settles all balances, potentially with more transfers than
+ *   MIN_TRANSFER, while remaining deterministic for equal inputs.
+ */
 class PairwiseSettlementStrategy : SettlementStrategy {
 
     override fun settle(netBalances: List<NetBalance>): List<SettlementTransfer> {

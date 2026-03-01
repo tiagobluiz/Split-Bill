@@ -14,6 +14,17 @@ data class SettlementTransfer(
     val amount: BigDecimal
 )
 
+/**
+ * Strategy contract for transforming participant net balances into settlement transfers.
+ *
+ * Input:
+ * - `netBalances`: one entry per person, where positive means the person is owed money and
+ *   negative means the person owes money.
+ *
+ * Output:
+ * - list of directed transfers (`fromPersonId` -> `toPersonId`) whose amounts settle the
+ *   provided net balances under the strategy's policy.
+ */
 interface SettlementStrategy {
     fun settle(netBalances: List<NetBalance>): List<SettlementTransfer>
 }

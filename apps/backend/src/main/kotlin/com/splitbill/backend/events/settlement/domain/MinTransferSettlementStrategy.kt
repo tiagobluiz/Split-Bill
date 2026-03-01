@@ -5,6 +5,16 @@ import java.util.UUID
 import kotlin.math.min
 
 @Component
+/**
+ * Greedy settlement strategy that prioritizes the largest outstanding creditor/debtor buckets
+ * first to reduce transfer count for the same net balance set.
+ *
+ * Input:
+ * - net balances where positive amounts are creditors and negative amounts are debtors.
+ *
+ * Output:
+ * - deterministic transfer list that settles balances with transfer-minimizing intent.
+ */
 class MinTransferSettlementStrategy : SettlementStrategy {
 
     override fun settle(netBalances: List<NetBalance>): List<SettlementTransfer> {

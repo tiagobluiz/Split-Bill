@@ -45,7 +45,7 @@ class EventBalanceService(
         val owedByPerson = personIds.associateWith { mutableListOf<BalanceCounterpartyAmountDto>() }
 
         transfers.forEach { transfer ->
-            val money = MoneyDto(amount = transfer.amount.scaleMoney(), currency = currency)
+            val money = MoneyDto(amount = transfer.amount.scaleMoney().toPlainString(), currency = currency)
             owesByPerson[transfer.fromPersonId]?.add(
                 BalanceCounterpartyAmountDto(counterpartyPersonId = transfer.toPersonId, amount = money)
             )
@@ -61,7 +61,9 @@ class EventBalanceService(
             balances = personIds.map { personId ->
                 BalanceDto(
                     personId = personId,
-                    netAmountInEventCurrency = (snapshotByPerson[personId] ?: BigDecimal.ZERO.scaleMoney()).scaleMoney(),
+                    netAmountInEventCurrency = (snapshotByPerson[personId] ?: BigDecimal.ZERO.scaleMoney())
+                        .scaleMoney()
+                        .toPlainString(),
                     owes = owesByPerson[personId]
                         ?.sortedBy { it.counterpartyPersonId.toString() }
                         ?: emptyList(),
