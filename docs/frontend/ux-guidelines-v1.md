@@ -103,6 +103,7 @@ Rules:
 ## 4) Visual System Contract
 ### 4.1 Token Table
 #### Spacing
+
 | Token | Value |
 |---|---|
 | `space-1` | `4px` |
@@ -114,7 +115,9 @@ Rules:
 | `space-8` | `32px` |
 | `space-10` | `40px` |
 
+
 #### Radius
+
 | Token | Value | Usage |
 |---|---|---|
 | `radius-sm` | `8px` | Inputs, chips |
@@ -122,7 +125,9 @@ Rules:
 | `radius-lg` | `16px` | Modals, feature panels |
 | `radius-pill` | `999px` | pills/tags |
 
+
 #### Elevation
+
 | Token | Value |
 |---|---|
 | `elevation-0` | `none` |
@@ -130,12 +135,15 @@ Rules:
 | `elevation-2` | `0 4px 12px rgba(20,18,30,0.10)` |
 | `elevation-3` | `0 10px 24px rgba(20,18,30,0.14)` |
 
+
 #### Borders
+
 | Token | Value |
 |---|---|
 | `border-subtle` | `1px solid #F3E4DA` |
 | `border-default` | `1px solid #E7D7CC` |
 | `border-strong` | `1px solid #D5BFAA` |
+
 
 ### 4.2 Color Contract (Warm Multi-Accent)
 Warm base:
@@ -172,6 +180,7 @@ Family:
 - Fallback: `"Segoe UI", "Helvetica Neue", Arial, sans-serif`
 
 Scale:
+
 | Style | Size | Weight | Line Height |
 |---|---|---|---|
 | `display-md` | `36px` | `700` | `44px` |
@@ -182,6 +191,7 @@ Scale:
 | `body-md` | `16px` | `400` | `24px` |
 | `body-sm` | `14px` | `400` | `20px` |
 | `label-sm` | `12px` | `600` | `16px` |
+
 
 Typography rules:
 - Never use font size under `12px`.

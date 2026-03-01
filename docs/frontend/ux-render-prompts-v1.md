@@ -1,4 +1,4 @@
-﻿# Split-Bill UX Render Prompts v1
+# Split-Bill UX Render Prompts v1
 
 Status: Mandatory visual reference for frontend implementation.
 Usage rule: Generate the relevant screen render before implementing or modifying a screen. Keep generated outputs attached to PR evidence.
