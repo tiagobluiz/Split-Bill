@@ -56,4 +56,16 @@ describe("App routing and guards", () => {
       expect(screen.getByRole("heading", { name: "Your events" })).toBeInTheDocument();
     });
   });
+
+  it("allows authenticated users to open events workspace", async () => {
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({ email: "member@splitbill.test", displayName: "member" })
+    );
+
+    renderApp("/app/events");
+
+    expect(await screen.findByRole("heading", { name: "Event setup" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create event" })).toBeInTheDocument();
+  });
 });
