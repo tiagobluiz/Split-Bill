@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./layout/AppShell";
 import { DashboardPage } from "./pages/DashboardPage";
+import { EventDetailPage } from "./pages/EventDetailPage";
 import { LandingPage } from "./pages/LandingPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -21,6 +22,7 @@ function App() {
         <Route path="/app" element={<AppShell />}>
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="events" element={<Navigate to="/app/dashboard" replace />} />
+          <Route path="events/:eventId" element={<EventDetailPage />} />
           <Route path="balances" element={<Navigate to="/app/dashboard" replace />} />
           <Route path="analytics" element={<Navigate to="/app/dashboard" replace />} />
           <Route path="settings" element={<SettingsPage />} />
