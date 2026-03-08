@@ -32,6 +32,9 @@ export function SignInPage() {
   const [authError, setAuthError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const showRegistrationSuccess = Boolean(
+    (location.state as { registrationSuccess?: boolean } | undefined)?.registrationSuccess
+  );
   const from = (location.state as { from?: string } | undefined)?.from ?? "/app/dashboard";
   const {
     control,
@@ -80,6 +83,9 @@ export function SignInPage() {
 
             {showEmailVerificationWarning ? (
               <Alert severity="warning">Email not verified. Verify your email before joining events.</Alert>
+            ) : null}
+            {showRegistrationSuccess ? (
+              <Alert severity="success">Account created. You can now sign in.</Alert>
             ) : null}
             {authError ? <Alert severity="error">{authError}</Alert> : null}
 

@@ -1,6 +1,5 @@
 import AccountCircleRoundedIcon from "@mui/icons-material/AccountCircleRounded";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
-import EventOutlinedIcon from "@mui/icons-material/EventOutlined";
 import LogoutRoundedIcon from "@mui/icons-material/LogoutRounded";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import {
@@ -40,7 +39,6 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", to: "/app/dashboard", icon: <DashboardOutlinedIcon /> },
-  { label: "Events", to: "/app/events", icon: <EventOutlinedIcon /> },
   { label: "Settings", to: "/app/settings", icon: <SettingsOutlinedIcon /> }
 ];
 

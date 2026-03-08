@@ -35,6 +35,33 @@ This starts both local app workspaces:
 - `npm run format`: applies whitespace/newline formatting to text files.
 - `npm test`: runs bootstrap verification tests.
 
+## Local Infrastructure
+
+Start local Postgres and LocalStack (S3):
+
+- `docker compose up -d`
+
+If default ports are already in use, set overrides before startup:
+
+- PowerShell: `$env:POSTGRES_PORT='5433'; $env:LOCALSTACK_PORT='4567'; docker compose up -d`
+
+Stop and remove containers:
+
+- `docker compose down`
+
+Connection defaults:
+
+- Postgres host: `localhost`
+- Postgres port: `${POSTGRES_PORT:-5432}`
+- Postgres database: `split_bill`
+- Postgres username: `split_bill`
+- Postgres password: `split_bill`
+- LocalStack endpoint: `http://localhost:${LOCALSTACK_PORT:-4566}`
+- LocalStack region: `us-east-1`
+- LocalStack bucket: `split-bill-local` (override with `S3_BUCKET_NAME`)
+- LocalStack access key: `test`
+- LocalStack secret key: `test`
+
 ## CI
 
 - Pull requests run `.github/workflows/ci-quality-gates.yml`.

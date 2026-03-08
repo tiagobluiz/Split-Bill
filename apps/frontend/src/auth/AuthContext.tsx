@@ -1,11 +1,19 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useMemo, useState } from "react";
-
-const AUTH_STORAGE_KEY = "splitbill.session.v1";
+import { ResponseError } from "@contracts/client";
+import { authApi } from "../api/contractsClient";
+import {
+  clearStoredSession,
+  readStoredSession as readStoredAuthSession,
+  writeStoredSession
+} from "./sessionStore";
 
 export type AuthSession = {
+  accountId: string;
   email: string;
   displayName: string;
+  preferredCurrency: string;
+  emailVerified: boolean;
 };
 
 export type SignInPayload = {
@@ -16,29 +24,24 @@ export type SignInPayload = {
 
 type AuthContextValue = {
   session: AuthSession | null;
-  signIn: (payload: SignInPayload) => void;
-  signOut: () => void;
+  signIn: (payload: SignInPayload) => Promise<void>;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function readStoredSession(): AuthSession | null {
-  const raw =
-    window.localStorage.getItem(AUTH_STORAGE_KEY) ??
-    window.sessionStorage.getItem(AUTH_STORAGE_KEY);
-  if (!raw) {
+  const stored = readStoredAuthSession();
+  if (!stored) {
     return null;
   }
-
-  try {
-    const parsed = JSON.parse(raw) as AuthSession;
-    if (!parsed.email || !parsed.displayName) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
+  return {
+    accountId: stored.accountId,
+    email: stored.email,
+    displayName: stored.displayName,
+    preferredCurrency: stored.preferredCurrency,
+    emailVerified: stored.emailVerified
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -47,21 +50,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      signIn: ({ email, password, keepSignedIn }: SignInPayload) => {
-        // Mock auth for SB-016. Replace with API credential validation in auth implementation issue.
-        void password;
-        const normalized = email.trim().toLowerCase();
-        const displayName = normalized.split("@")[0] || "Member";
-        const nextSession = { email: normalized, displayName };
-        const storage = keepSignedIn ? window.localStorage : window.sessionStorage;
-        const fallbackStorage = keepSignedIn ? window.sessionStorage : window.localStorage;
-        storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
-        fallbackStorage.removeItem(AUTH_STORAGE_KEY);
-        setSession(nextSession);
+      signIn: async ({ email, password, keepSignedIn }: SignInPayload) => {
+        try {
+          const response = await authApi.authLoginPost({
+            loginRequest: {
+              email: email.trim().toLowerCase(),
+              password
+            }
+          });
+
+          const nextSession = {
+            accountId: response.account.id,
+            email: response.account.email,
+            displayName: response.account.name,
+            preferredCurrency: response.account.preferredCurrency,
+            emailVerified: response.account.emailVerified
+          };
+
+          writeStoredSession(
+            {
+              ...nextSession,
+              accessToken: response.tokens.accessToken,
+              refreshToken: response.tokens.refreshToken,
+              expiresAt: Date.now() + response.tokens.expiresInSeconds * 1000
+            },
+            keepSignedIn
+          );
+
+          setSession(nextSession);
+        } catch (error) {
+          if (error instanceof ResponseError) {
+            const payload = (await error.response.json().catch(() => null)) as
+              | { message?: string }
+              | null;
+            throw new Error(payload?.message ?? "Could not sign in.");
+          }
+          throw error;
+        }
       },
-      signOut: () => {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
-        window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+      signOut: async () => {
+        try {
+          await authApi.authLogoutPost();
+        } catch {
+          // Best-effort logout: clear local session regardless of API outcome.
+        }
+        clearStoredSession();
         setSession(null);
       }
     }),

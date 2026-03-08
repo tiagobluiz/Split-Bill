@@ -1,8 +1,11 @@
 import { Alert, Box, Button, Card, CardContent, Link, Stack, TextField, Typography } from "@mui/material";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { ResponseError } from "@contracts/client";
 import { Controller, useForm } from "react-hook-form";
+import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { z } from "zod";
+import { authApi } from "../api/contractsClient";
 
 const registerSchema = z
   .object({
@@ -20,6 +23,7 @@ type RegisterValues = z.infer<typeof registerSchema>;
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     control,
     handleSubmit,
@@ -35,8 +39,27 @@ export function RegisterPage() {
     }
   });
 
-  const onSubmit = async () => {
-    navigate("/sign-in", { replace: true });
+  const onSubmit = async (values: RegisterValues) => {
+    try {
+      setSubmitError(null);
+      await authApi.authRegisterPost({
+        registerRequest: {
+          name: values.fullName.trim(),
+          email: values.email.trim().toLowerCase(),
+          password: values.password
+        }
+      });
+
+      navigate("/sign-in", { replace: true, state: { registrationSuccess: true } });
+    } catch (error) {
+      if (error instanceof ResponseError) {
+        const payload = (await error.response.json().catch(() => null)) as { message?: string } | null;
+        setSubmitError(payload?.message ?? "Could not create your account. Try again.");
+        return;
+      }
+
+      setSubmitError("Could not create your account. Try again.");
+    }
   };
 
   return (
@@ -51,6 +74,7 @@ export function RegisterPage() {
               <Typography color="text.secondary">Register and verify your email before joining events.</Typography>
             </Box>
             <Alert severity="info">You must verify your email before creating or joining events.</Alert>
+            {submitError ? <Alert severity="error">{submitError}</Alert> : null}
             <Box component="form" noValidate onSubmit={handleSubmit(onSubmit)}>
               <Stack spacing={2}>
                 <Controller
