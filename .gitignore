@@ -7,7 +7,13 @@ coverage/
 .DS_Store
 Thumbs.db
 
-apps/**/dist/
-apps/**/build/
-infra/**/dist/
-packages/**/dist/
+dist/
+build/
+playwright-report/
+test-results/
+*.tsbuildinfo
+apps/
+packages/
+infra/
+tools/
+.tmp-*/

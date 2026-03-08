@@ -1,12 +1,10 @@
 # Documentation Index
 
-## Frontend
-- [UX Guidelines v1](./frontend/ux-guidelines-v1.md)
-- [UX Render Prompts v1](./frontend/ux-render-prompts-v1.md)
+## Product
 
-## Developer
-- [CI Quality Gates](./developer/ci-quality-gates.md)
-- [Local Setup](./developer/local-setup.md)
+- [Main SPA plan](./main-spa-plan.md)
 
-## Planning
-- [Split-Bill v1 Delivery Plan](./plans/split-bill-v1-delivery-plan.md)
+## Repository
+
+- The repository is now a single frontend application.
+- Local setup lives in the root [README](../README.md).

@@ -1,48 +1,45 @@
-# Split-Bill Monorepo
+# Split-Bill
 
-This repository is bootstrapped as a monorepo with shared conventions for
-formatting, linting, and testing.
+Split-Bill is a frontend-only single-page application for splitting supermarket
+receipts quickly. One person pays the bill, everyone adds the items they
+consumed, and the app calculates who should reimburse the payer.
 
-## Layout
+## Product Focus
 
-- `apps/backend`: Kotlin/Spring backend app (implementation to be added in SB-005+).
-- `apps/frontend`: React/TypeScript frontend app (implementation to be added in SB-016+).
-- `packages/contracts`: OpenAPI and generated client artifacts (SB-003/SB-004).
-- `infra/devops`: infrastructure workspace for CI/CD and deployment assets.
-- `docs`: plans and developer documentation.
-- `tools/standards`: repository quality scripts used by root commands.
+- One receipt, one payer, many participants.
+- Item-by-item allocation with default even splits plus shares and percentages.
+- Fast entry with drag-and-drop reordering for items.
+- Browser-local draft restore so a refresh does not lose the split.
 
-## Prerequisites
+## Stack
 
-- Node.js 20+
+- React 19
+- TypeScript
+- Vite
+- MUI
+- React Hook Form
+- Zod
+- Vitest
+- Playwright
 
-## Bootstrap Flow
+## Commands
 
-1. `npm run bootstrap`
-2. `npm run dev`
+- `npm run dev`: start the local app at `http://localhost:5173`
+- `npm run build`: create a production build
+- `npm run lint`: run ESLint
+- `npm run test:run`: run unit and integration tests
+- `npm run test:e2e`: run Playwright end-to-end tests
 
-This starts both local app workspaces:
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8080` (`/health` available)
+## Getting Started
 
-## Root Commands
+1. Install dependencies with `npm install`
+2. Start the app with `npm run dev`
 
-- `npm run bootstrap`: validates local prerequisites and workspace structure.
-- `npm run dev`: starts frontend and backend workspace dev servers together.
-- `npm run lint`: validates monorepo structure and coding standards.
-- `npm run contracts:check`: validates frozen OpenAPI v1 contract coverage.
-- `npm run format:check`: checks whitespace/newline standards.
-- `npm run format`: applies whitespace/newline formatting to text files.
-- `npm test`: runs bootstrap verification tests.
+## Documentation
 
-## CI
-
-- Pull requests run `.github/workflows/ci-quality-gates.yml`.
-- Required status check for protected `main`: `quality-gates`.
-- CI details: `docs/developer/ci-quality-gates.md`.
+- Product plan: `docs/main-spa-plan.md`
 
 ## Notes
 
-- `.editorconfig` and `.gitattributes` define line ending and spacing policies.
-- Root commands are intentionally lightweight so SB-001 can establish CI gates
-  before feature code exists.
+- `.editorconfig` and `.gitattributes` still define repository formatting rules.
+- Drafts are stored locally in the browser only.
