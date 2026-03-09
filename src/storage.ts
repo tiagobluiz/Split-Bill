@@ -2,6 +2,7 @@ import { STORAGE_KEY, type SplitFormValues } from "./domain/splitter";
 
 export type StoredDraft = {
   step: number;
+  hasUnlockedFullNavigation?: boolean;
   values: SplitFormValues;
 };
 

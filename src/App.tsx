@@ -2,14 +2,17 @@ import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowUpRoundedIcon from "@mui/icons-material/KeyboardArrowUpRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
-import ReceiptLongRoundedIcon from "@mui/icons-material/ReceiptLongRounded";
-import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
+import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
+import RemoveCircleOutlineRoundedIcon from "@mui/icons-material/RemoveCircleOutlineRounded";
+import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import {
   closestCenter,
   DndContext,
@@ -32,6 +35,7 @@ import {
   alpha,
   Box,
   Button,
+  ButtonBase,
   Card,
   CardContent,
   Chip,
@@ -39,11 +43,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   Grid,
   IconButton,
   InputAdornment,
   LinearProgress,
+  MenuItem,
   Snackbar,
   Stack,
   TextField,
@@ -52,15 +56,20 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import { startTransition, useEffect, useState, type ReactNode } from "react";
+import { startTransition, useDeferredValue, useEffect, useState, type ReactNode } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import {
-  buildShareSummary,
+  computeItemPreview,
   computeSettlement,
   createDefaultValues,
   createEmptyItem,
   createId,
   formatMoney,
+  formatMoneyTrailingSymbol,
+  parseMoneyToCents,
+  rebalancePercentAllocations,
+  resetPercentAllocations,
+  resetShareAllocations,
   syncItemAllocations,
   type AllocationFormValue,
   type ParticipantFormValue,
@@ -74,9 +83,17 @@ import { clearStoredDraft, loadStoredDraft, storeDraft } from "./storage";
 
 const STEP_LABELS = [
   "People & payer",
-  "Items",
+  "Consumption",
   "Consumption grid",
   "Results"
+] as const;
+
+const CURRENCY_OPTIONS = [
+  { code: "EUR", label: "Euro (€)" },
+  { code: "USD", label: "US Dollar ($)" },
+  { code: "GBP", label: "British Pound (£)" },
+  { code: "BRL", label: "Brazilian Real (R$)" },
+  { code: "CHF", label: "Swiss Franc (CHF)" }
 ] as const;
 
 function SortableCard(props: {
@@ -151,11 +168,18 @@ function SortableCard(props: {
 
 function App() {
   const storedDraft = loadStoredDraft();
+  const [hasStarted, setHasStarted] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const [hasUnlockedFullNavigation, setHasUnlockedFullNavigation] = useState(
+    Boolean(storedDraft?.hasUnlockedFullNavigation || (storedDraft?.step ?? 0) >= 1)
+  );
   const [participantInput, setParticipantInput] = useState("");
   const [showRestoreDialog, setShowRestoreDialog] = useState(Boolean(storedDraft));
   const [saveNoticeOpen, setSaveNoticeOpen] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
+  const [pdfNoticeOpen, setPdfNoticeOpen] = useState(false);
+  const [pdfErrorNoticeOpen, setPdfErrorNoticeOpen] = useState(false);
+  const [exportPdfPending, setExportPdfPending] = useState(false);
 
   const {
     control,
@@ -170,12 +194,6 @@ function App() {
     defaultValues: createDefaultValues()
   });
 
-  const participantsArray = useFieldArray({
-    control,
-    name: "participants",
-    keyName: "fieldKey"
-  });
-
   const itemsArray = useFieldArray({
     control,
     name: "items",
@@ -183,6 +201,7 @@ function App() {
   });
 
   const watchedValues = useWatch({ control }) as SplitFormValues;
+  const deferredValues = useDeferredValue(watchedValues);
   const participants = (useWatch({ control, name: "participants" }) ?? []) as ParticipantFormValue[];
   const items = (useWatch({ control, name: "items" }) ?? []) as SplitFormValues["items"];
   const payerParticipantId = (useWatch({ control, name: "payerParticipantId" }) ?? "") as string;
@@ -199,10 +218,11 @@ function App() {
     }
 
     storeDraft({
+      hasUnlockedFullNavigation,
       step: activeStep,
       values: watchedValues
     });
-  }, [activeStep, showRestoreDialog, watchedValues]);
+  }, [activeStep, hasUnlockedFullNavigation, showRestoreDialog, watchedValues]);
 
   function applyStepErrors(stepErrors: Array<{ path: string; message: string }>) {
     stepErrors.forEach((error) => {
@@ -242,14 +262,37 @@ function App() {
       return;
     }
 
+    const nextStep = Math.min(activeStep + 1, STEP_LABELS.length - 1);
+    if (nextStep >= 1) {
+      setHasUnlockedFullNavigation(true);
+    }
+
     startTransition(() => {
-      setActiveStep((currentStep) => Math.min(currentStep + 1, STEP_LABELS.length - 1));
+      setActiveStep(nextStep);
     });
   }
 
   function handleBack() {
     startTransition(() => {
       setActiveStep((currentStep) => Math.max(currentStep - 1, 0));
+    });
+  }
+
+  function canNavigateToStep(targetStep: number) {
+    return hasUnlockedFullNavigation || targetStep <= 1;
+  }
+
+  function handleStepNavigation(targetStep: number) {
+    if (!canNavigateToStep(targetStep)) {
+      return;
+    }
+
+    if (targetStep >= 1) {
+      setHasUnlockedFullNavigation(true);
+    }
+
+    startTransition(() => {
+      setActiveStep(targetStep);
     });
   }
 
@@ -263,34 +306,51 @@ function App() {
       id: createId(),
       name: nextName
     };
-    const nextParticipants = [...getValues("participants"), nextParticipant];
-    participantsArray.append(nextParticipant);
-    setValue("items", syncItemAllocations(getValues("items"), nextParticipants));
-    if (!getValues("payerParticipantId")) {
-      setValue("payerParticipantId", nextParticipant.id);
-    }
+    const currentValues = getValues();
+    const nextParticipants = [...currentValues.participants, nextParticipant];
+
+    reset({
+      ...currentValues,
+      participants: nextParticipants,
+      payerParticipantId: currentValues.payerParticipantId || nextParticipant.id,
+      items: syncItemAllocations(currentValues.items, nextParticipants)
+    });
     setParticipantInput("");
   }
 
   function removeParticipant(index: number) {
-    const currentParticipants = getValues("participants");
+    const currentValues = getValues();
+    const currentParticipants = currentValues.participants;
     const participantToRemove = currentParticipants[index];
     const nextParticipants = currentParticipants.filter((_, currentIndex) => currentIndex !== index);
 
-    participantsArray.remove(index);
-    setValue("items", syncItemAllocations(getValues("items"), nextParticipants));
-
-    if (participantToRemove?.id === getValues("payerParticipantId")) {
-      setValue("payerParticipantId", nextParticipants[0]?.id ?? "");
-    }
+    reset({
+      ...currentValues,
+      participants: nextParticipants,
+      payerParticipantId:
+        participantToRemove?.id === currentValues.payerParticipantId
+          ? (nextParticipants[0]?.id ?? "")
+          : currentValues.payerParticipantId,
+      items: syncItemAllocations(currentValues.items, nextParticipants)
+    });
   }
 
   function addItem() {
-    itemsArray.append(createEmptyItem(getValues("participants")));
+    const currentValues = getValues();
+
+    reset({
+      ...currentValues,
+      items: [...currentValues.items, createEmptyItem(currentValues.participants)]
+    });
   }
 
   function removeItem(index: number) {
-    itemsArray.remove(index);
+    const currentValues = getValues();
+
+    reset({
+      ...currentValues,
+      items: currentValues.items.filter((_, currentIndex) => currentIndex !== index)
+    });
   }
 
   function reorderItems(oldIndex: number, newIndex: number) {
@@ -299,6 +359,59 @@ function App() {
     }
 
     itemsArray.move(oldIndex, newIndex);
+  }
+
+  function handleItemSubmitFromEnter(index: number) {
+    const currentValues = getValues();
+    const currentItems = currentValues.items;
+    const currentItem = currentItems[index];
+
+    if (!currentItem) {
+      return;
+    }
+
+    const itemName = currentItem.name.trim();
+    const itemPrice = currentItem.price.trim();
+
+    if (!itemName && !itemPrice) {
+      const nextItems = currentItems.filter((_, currentIndex) => currentIndex !== index);
+      const nextValues = {
+        ...currentValues,
+        items: nextItems
+      };
+
+      reset(nextValues);
+
+      if (validateStepTwo(nextValues).length === 0) {
+        setHasUnlockedFullNavigation(true);
+        startTransition(() => {
+          setActiveStep(2);
+        });
+      }
+
+      return;
+    }
+
+    if (!itemName) {
+      return;
+    }
+
+    const parsedAmount = parseMoneyToCents(currentItem.price);
+    if (parsedAmount === null || parsedAmount === 0) {
+      return;
+    }
+
+    if (index === currentItems.length - 1) {
+      addItem();
+      window.setTimeout(() => {
+        const nextInput = document.querySelector<HTMLInputElement>(`input[name="items.${index + 1}.name"]`);
+        nextInput?.focus();
+      }, 0);
+      return;
+    }
+
+    const nextInput = document.querySelector<HTMLInputElement>(`input[name="items.${index + 1}.name"]`);
+    nextInput?.focus();
   }
 
   function handleItemDragEnd(event: DragEndEvent) {
@@ -314,6 +427,93 @@ function App() {
     }
   }
 
+  function setItemAllocations(itemIndex: number, nextAllocations: AllocationFormValue[]) {
+    setValue(`items.${itemIndex}.allocations`, nextAllocations, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: false
+    });
+    clearErrors(`items.${itemIndex}.allocations`);
+  }
+
+  function toggleEvenAllocation(itemIndex: number, allocationIndex: number) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    const nextAllocations = currentAllocations.map((allocation, currentIndex) =>
+      currentIndex === allocationIndex
+        ? { ...allocation, evenIncluded: !allocation.evenIncluded }
+        : allocation
+    );
+
+    setItemAllocations(itemIndex, nextAllocations);
+  }
+
+  function formatEditableNumber(value: number) {
+    if (Number.isInteger(value)) {
+      return String(value);
+    }
+
+    return value.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  function updateShareValue(itemIndex: number, allocationIndex: number, nextValue: string) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    const nextAllocations = currentAllocations.map((allocation, currentIndex) =>
+      currentIndex === allocationIndex
+        ? { ...allocation, shares: nextValue }
+        : allocation
+    );
+
+    setItemAllocations(itemIndex, nextAllocations);
+  }
+
+  function nudgeShareValue(itemIndex: number, allocationIndex: number, direction: 1 | -1) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    const currentValue = Number(currentAllocations[allocationIndex]?.shares || 0);
+    const safeCurrentValue = Number.isFinite(currentValue) ? currentValue : 0;
+    const nextValue = Math.max(0, safeCurrentValue + direction);
+
+    updateShareValue(itemIndex, allocationIndex, formatEditableNumber(nextValue));
+  }
+
+  function zeroShareValue(itemIndex: number, allocationIndex: number) {
+    updateShareValue(itemIndex, allocationIndex, "0");
+  }
+
+  function resetShareValues(itemIndex: number) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    setItemAllocations(itemIndex, resetShareAllocations(currentAllocations));
+  }
+
+  function updatePercentValue(itemIndex: number, participantId: string, nextValue: string) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    const nextAllocations = rebalancePercentAllocations(currentAllocations, participantId, nextValue);
+
+    if (!nextAllocations) {
+      return;
+    }
+
+    setItemAllocations(itemIndex, nextAllocations);
+  }
+
+  function nudgePercentValue(itemIndex: number, participantId: string, direction: 1 | -1) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    const currentAllocation = currentAllocations.find((allocation) => allocation.participantId === participantId);
+    const currentValue = Number(currentAllocation?.percent || 0);
+    const safeCurrentValue = Number.isFinite(currentValue) ? currentValue : 0;
+    const nextValue = Math.max(0, Math.min(100, safeCurrentValue + direction));
+
+    updatePercentValue(itemIndex, participantId, formatEditableNumber(nextValue));
+  }
+
+  function zeroPercentValue(itemIndex: number, participantId: string) {
+    updatePercentValue(itemIndex, participantId, "0");
+  }
+
+  function resetPercentValues(itemIndex: number) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    setItemAllocations(itemIndex, resetPercentAllocations(currentAllocations));
+  }
+
   function restoreDraft() {
     if (!storedDraft) {
       setShowRestoreDialog(false);
@@ -322,6 +522,8 @@ function App() {
 
     reset(storedDraft.values);
     setActiveStep(storedDraft.step);
+    setHasUnlockedFullNavigation(Boolean(storedDraft.hasUnlockedFullNavigation || storedDraft.step >= 1));
+    setHasStarted(true);
     setShowRestoreDialog(false);
     setSaveNoticeOpen(true);
   }
@@ -330,6 +532,8 @@ function App() {
     clearStoredDraft();
     reset(createDefaultValues());
     setActiveStep(0);
+    setHasUnlockedFullNavigation(false);
+    setHasStarted(false);
     setShowRestoreDialog(false);
   }
 
@@ -337,6 +541,8 @@ function App() {
     clearStoredDraft();
     reset(createDefaultValues());
     setActiveStep(0);
+    setHasUnlockedFullNavigation(false);
+    setHasStarted(false);
   }
 
   async function copySummary() {
@@ -345,20 +551,16 @@ function App() {
       return;
     }
 
-    const lines = settlement.data.transfers.length
-      ? settlement.data.transfers.map(
-          (transfer) =>
-            `${transfer.fromName} pays ${transfer.toName} ${formatMoney(transfer.amountCents, settlement.data.currency)}`
-        )
-      : ["Everyone is settled."];
-
     const summary = [
       "Split-Bill summary",
-      ...lines,
-      "",
       ...settlement.data.people.map(
-        (person) =>
-          `${person.name}: consumed ${formatMoney(person.consumedCents, settlement.data.currency)}, paid ${formatMoney(person.paidCents, settlement.data.currency)}, net ${formatMoney(person.netCents, settlement.data.currency)}`
+        (person) => {
+          if (person.isPayer) {
+            return `${person.name}: paid ${formatMoney(person.paidCents, settlement.data.currency)} and should get back ${formatMoney(person.netCents, settlement.data.currency)}.`;
+          }
+
+          return `${person.name}: owes ${formatMoney(Math.abs(person.netCents), settlement.data.currency)}.`;
+        }
       )
     ].join("\n");
 
@@ -366,8 +568,27 @@ function App() {
     setCopyNoticeOpen(true);
   }
 
-  const settlement = computeSettlement(watchedValues);
-  const payer = participants.find((participant) => participant.id === payerParticipantId);
+  async function exportSummaryPdf() {
+    const settlement = computeSettlement(getValues());
+    if (!settlement.ok) {
+      return;
+    }
+
+    setPdfErrorNoticeOpen(false);
+    setExportPdfPending(true);
+
+    try {
+      const { exportSettlementPdf } = await import("./pdf/exportSettlementPdf");
+      await exportSettlementPdf(getValues());
+      setPdfNoticeOpen(true);
+    } catch {
+      setPdfErrorNoticeOpen(true);
+    } finally {
+      setExportPdfPending(false);
+    }
+  }
+
+  const settlement = computeSettlement(deferredValues);
 
   return (
     <Box
@@ -378,106 +599,86 @@ function App() {
           "radial-gradient(circle at top left, rgba(239,91,60,0.18), transparent 30%), radial-gradient(circle at right 20%, rgba(15,118,110,0.18), transparent 25%), linear-gradient(180deg, #FFF8F2 0%, #FFFDFC 72%)"
       }}
     >
-      <Box sx={{ maxWidth: 1240, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 3, md: 5 } }}>
-        <Stack spacing={4}>
-          <Card
-            sx={{
-              overflow: "hidden",
-              background:
-                "linear-gradient(135deg, rgba(239,91,60,0.95), rgba(246,151,59,0.95) 58%, rgba(15,118,110,0.92))",
-              color: "white"
-            }}
-          >
-            <CardContent sx={{ p: { xs: 3, md: 5 } }}>
-              <Grid container spacing={3} alignItems="center">
-                <Grid size={{ xs: 12, md: 7 }}>
-                  <Stack spacing={2.5}>
-                    <Chip
-                      label="Supermarket receipt splitter"
-                      icon={<ReceiptLongRoundedIcon sx={{ color: "white !important" }} />}
+      {!hasStarted && (
+        <Box
+          sx={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            background:
+              "linear-gradient(135deg, rgba(239,91,60,0.95), rgba(246,151,59,0.95) 58%, rgba(15,118,110,0.92))",
+            color: "white"
+          }}
+        >
+          <Box sx={{ maxWidth: 1240, mx: "auto", width: "100%", px: { xs: 2, md: 4 }, py: { xs: 4, md: 6 } }}>
+            <Grid container spacing={4} alignItems="center">
+              <Grid size={{ xs: 12, md: 7 }}>
+                <Stack spacing={2.5}>
+                  <Typography variant="h1">Split grocery bills without the spreadsheet drama.</Typography>
+                  <Typography sx={{ maxWidth: 640, fontSize: { xs: "1rem", md: "1.15rem" }, opacity: 0.9 }}>
+                    Add the people, mark who paid, drop in each product, and fine-tune who consumed what.
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      endIcon={<ArrowForwardRoundedIcon />}
+                      onClick={() => setHasStarted(true)}
                       sx={{
-                        alignSelf: "flex-start",
-                        bgcolor: alpha("#FFFFFF", 0.16),
-                        color: "white",
-                        fontWeight: 700
+                        bgcolor: "white",
+                        color: "#C64024",
+                        "&:hover": { bgcolor: alpha("#FFFFFF", 0.92) }
                       }}
-                    />
-                    <Typography variant="h1">
-                      Split one grocery bill without the spreadsheet drama.
-                    </Typography>
-                    <Typography sx={{ maxWidth: 640, fontSize: { xs: "1rem", md: "1.15rem" }, opacity: 0.9 }}>
-                      Add the people, mark who paid, drop in each product, and fine-tune who consumed what.
-                      The payer stays visible the whole way and the result is ready to copy.
-                    </Typography>
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                      <Button
-                        variant="contained"
-                        size="large"
-                        endIcon={<ArrowForwardRoundedIcon />}
-                        onClick={() => {
-                          const wizard = document.getElementById("splitter-wizard");
-                          wizard?.scrollIntoView({ behavior: "smooth", block: "start" });
-                        }}
-                        sx={{
-                          bgcolor: "white",
-                          color: "#C64024",
-                          "&:hover": { bgcolor: alpha("#FFFFFF", 0.92) }
-                        }}
-                      >
-                        Start splitting
-                      </Button>
-                      <Chip
-                        label={`Currency ${currency || "EUR"}`}
-                        sx={{
-                          alignSelf: { xs: "stretch", sm: "center" },
-                          bgcolor: alpha("#FFFFFF", 0.16),
-                          color: "white"
-                        }}
-                      />
-                    </Stack>
+                    >
+                      Start splitting
+                    </Button>
                   </Stack>
-                </Grid>
-                <Grid size={{ xs: 12, md: 5 }}>
-                  <Card
-                    sx={{
-                      bgcolor: alpha("#0F172A", 0.2),
-                      borderColor: alpha("#FFFFFF", 0.2)
-                    }}
-                  >
-                    <CardContent>
-                      <Stack spacing={2}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="h3" sx={{ color: "white" }}>
-                            Quick flow
-                          </Typography>
-                          <PaidRoundedIcon />
-                        </Stack>
-                        {[
-                          "1. Add at least two people and choose the payer.",
-                          "2. Add every product line and reorder freely.",
-                          "3. Adjust who consumed each item.",
-                          "4. Copy the reimbursement summary."
-                        ].map((line) => (
-                          <Alert
-                            key={line}
-                            icon={false}
-                            sx={{
-                              bgcolor: alpha("#FFFFFF", 0.12),
-                              color: "white",
-                              "& .MuiAlert-message": { width: "100%" }
-                            }}
-                          >
-                            {line}
-                          </Alert>
-                        ))}
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
+                </Stack>
               </Grid>
-            </CardContent>
-          </Card>
+              <Grid size={{ xs: 12, md: 5 }}>
+                <Card
+                  sx={{
+                    bgcolor: alpha("#0F172A", 0.2),
+                    borderColor: alpha("#FFFFFF", 0.2)
+                  }}
+                >
+                  <CardContent>
+                    <Stack spacing={2}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h3" sx={{ color: "white" }}>
+                          Quick flow
+                        </Typography>
+                        <PaidRoundedIcon />
+                      </Stack>
+                      {[
+                        "1. Add at least two people and choose the payer.",
+                        "2. Add every product line and reorder freely.",
+                        "3. Adjust who consumed each item.",
+                        "4. Copy the reimbursement summary."
+                      ].map((line) => (
+                        <Alert
+                          key={line}
+                          icon={false}
+                          sx={{
+                            bgcolor: alpha("#FFFFFF", 0.12),
+                            color: "white",
+                            "& .MuiAlert-message": { width: "100%" }
+                          }}
+                        >
+                          {line}
+                        </Alert>
+                      ))}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+        </Box>
+      )}
 
+      {hasStarted && (
+        <Box sx={{ maxWidth: 1240, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 3, md: 5 } }}>
           <Card id="splitter-wizard">
             <CardContent sx={{ p: { xs: 2.5, md: 4 } }}>
               <Stack spacing={3}>
@@ -488,13 +689,6 @@ function App() {
                       Fast setup, item-level control, and one clean settlement at the end.
                     </Typography>
                   </Box>
-                  <TextField
-                    label="Currency"
-                    size="small"
-                    value={currency}
-                    onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
-                    sx={{ width: { xs: "100%", md: 180 } }}
-                  />
                 </Stack>
 
                 <Grid container spacing={1.5}>
@@ -505,9 +699,25 @@ function App() {
                     return (
                       <Grid size={{ xs: 12, sm: 6, md: 3 }} key={label}>
                         <Box
+                          role="button"
+                          aria-label={`Go to step ${index + 1}: ${label}`}
+                          aria-current={current ? "step" : undefined}
+                          tabIndex={canNavigateToStep(index) ? 0 : -1}
+                          aria-disabled={!canNavigateToStep(index)}
+                          onClick={() => handleStepNavigation(index)}
+                          onKeyDown={(event) => {
+                            if (!canNavigateToStep(index)) {
+                              return;
+                            }
+
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleStepNavigation(index);
+                            }
+                          }}
                           sx={{
                             p: 2,
-                            borderRadius: 4,
+                            borderRadius: "20px",
                             border: "1px solid",
                             borderColor: current
                               ? "primary.main"
@@ -518,7 +728,21 @@ function App() {
                               ? alpha("#EF5B3C", 0.08)
                               : completed
                                 ? alpha("#0F766E", 0.08)
-                                : "transparent"
+                                : "transparent",
+                            cursor: canNavigateToStep(index) ? "pointer" : "not-allowed",
+                            opacity: canNavigateToStep(index) ? 1 : 0.55,
+                            transition: "border-color 120ms ease, background-color 120ms ease, opacity 120ms ease",
+                            "&:hover": canNavigateToStep(index)
+                              ? {
+                                  borderColor: current ? "primary.main" : alpha("#EF5B3C", 0.28),
+                                  bgcolor: current ? alpha("#EF5B3C", 0.1) : alpha("#EF5B3C", 0.04)
+                                }
+                              : undefined,
+                            "&:focus-visible": {
+                              outline: "2px solid",
+                              outlineColor: alpha("#EF5B3C", 0.45),
+                              outlineOffset: 2
+                            }
                           }}
                         >
                           <Typography variant="body2" color="text.secondary">
@@ -573,6 +797,21 @@ function App() {
                       </Button>
                     </Stack>
 
+                    <TextField
+                      select
+                      label="Currency"
+                      size="small"
+                      value={currency}
+                      onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
+                      sx={{ width: { xs: "100%", md: 220 } }}
+                    >
+                      {CURRENCY_OPTIONS.map((option) => (
+                        <MenuItem key={option.code} value={option.code}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+
                     {errors.participants?.message && (
                       <Alert severity="error">{errors.participants.message}</Alert>
                     )}
@@ -613,6 +852,7 @@ function App() {
                                     <IconButton
                                       aria-label={`Remove ${participant.name || `participant ${index + 1}`}`}
                                       onClick={() => removeParticipant(index)}
+                                      type="button"
                                     >
                                       <DeleteOutlineRoundedIcon />
                                     </IconButton>
@@ -647,10 +887,6 @@ function App() {
 
                 {activeStep === 1 && (
                   <Stack spacing={3}>
-                    <Alert severity="info" icon={<PaidRoundedIcon />}>
-                      {payer ? `${payer.name} paid the receipt.` : "Choose the payer in Step 1 before continuing."}
-                    </Alert>
-
                     <Button
                       variant="contained"
                       startIcon={<AddRoundedIcon />}
@@ -683,7 +919,30 @@ function App() {
                                 disableMoveUp={index === 0}
                                 disableMoveDown={index === items.length - 1}
                               >
-                                <Grid container spacing={2}>
+                                <Stack spacing={1.75}>
+                                  {(item.name.trim() || item.price.trim()) && (
+                                    <Stack
+                                      direction={{ xs: "column", sm: "row" }}
+                                      spacing={{ xs: 0.35, sm: 1 }}
+                                      alignItems={{ sm: "center" }}
+                                    >
+                                      <Typography variant="h6" fontWeight={800}>
+                                        {item.name.trim() || `Item ${index + 1}`}
+                                      </Typography>
+                                      {item.price.trim() && (
+                                        <Typography
+                                          variant="h6"
+                                          fontWeight={800}
+                                          color="primary.main"
+                                          sx={{ letterSpacing: "-0.02em" }}
+                                        >
+                                          {formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)}
+                                        </Typography>
+                                      )}
+                                    </Stack>
+                                  )}
+
+                                  <Grid container spacing={2}>
                                   <Grid size={{ xs: 12, md: 7 }}>
                                     <TextField
                                       label="Item name"
@@ -692,6 +951,12 @@ function App() {
                                       {...register(`items.${index}.name` as const)}
                                       error={Boolean(itemNameError)}
                                       helperText={itemNameError}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          handleItemSubmitFromEnter(index);
+                                        }
+                                      }}
                                     />
                                   </Grid>
                                   <Grid size={{ xs: 12, md: 4 }}>
@@ -707,6 +972,12 @@ function App() {
                                           <InputAdornment position="start">{currency}</InputAdornment>
                                         )
                                       }}
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          handleItemSubmitFromEnter(index);
+                                        }
+                                      }}
                                     />
                                   </Grid>
                                   <Grid size={{ xs: 12, md: 1 }}>
@@ -714,11 +985,13 @@ function App() {
                                       aria-label={`Delete ${item.name || `item ${index + 1}`}`}
                                       onClick={() => removeItem(index)}
                                       sx={{ mt: { md: 1 } }}
+                                      type="button"
                                     >
                                       <DeleteOutlineRoundedIcon />
                                     </IconButton>
                                   </Grid>
-                                </Grid>
+                                  </Grid>
+                                </Stack>
                               </SortableCard>
                             );
                           })}
@@ -729,13 +1002,10 @@ function App() {
                 )}
 
                 {activeStep === 2 && (
-                  <Stack spacing={3}>
-                    <Alert severity="info" icon={<SavingsRoundedIcon />}>
-                      {payer
-                        ? `${payer.name} stays highlighted as the payer while you assign each item.`
-                        : "Choose the payer in Step 1 before continuing."}
-                    </Alert>
-
+                  <Stack spacing={2}>
+                    <Typography variant="body2" color="text.secondary">
+                      Item previews are provisional. Final leftover cents are balanced in the results step.
+                    </Typography>
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
@@ -743,10 +1013,17 @@ function App() {
                       onDragEnd={handleItemDragEnd}
                     >
                       <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                        <Stack spacing={2}>
+                        <Stack spacing={1.5}>
                           {items.map((item, itemIndex) => {
-                            const parsedItem =
-                              settlement.ok && settlement.data.itemBreakdown.find((entry) => entry.id === item.id);
+                            const deferredItem =
+                              deferredValues.items.find((entry) => entry.id === item.id) ?? item;
+                            const itemPreview = computeItemPreview(
+                              deferredItem,
+                              deferredValues.participants,
+                              deferredValues.payerParticipantId,
+                              deferredValues.currency
+                            );
+                            const previewPeople = itemPreview.ok ? itemPreview.data.people : [];
                             const allocationError =
                               typeof errors.items?.[itemIndex]?.allocations?.message === "string"
                                 ? errors.items[itemIndex]?.allocations?.message
@@ -761,121 +1038,238 @@ function App() {
                                 disableMoveUp={itemIndex === 0}
                                 disableMoveDown={itemIndex === items.length - 1}
                               >
-                                <Stack spacing={2}>
+                                <Stack spacing={1.75}>
                                   <Stack
                                     direction={{ xs: "column", md: "row" }}
-                                    spacing={1.5}
+                                    spacing={1}
                                     justifyContent="space-between"
+                                    alignItems={{ md: "center" }}
                                   >
                                     <Box>
-                                      <Typography variant="h3">{item.name || `Item ${itemIndex + 1}`}</Typography>
-                                      <Typography color="text.secondary">
-                                        {item.price ? `${currency} ${item.price}` : "Enter an amount in Step 2"}
+                                      <Typography variant="h6" fontWeight={800}>
+                                        {item.name || `Item ${itemIndex + 1}`}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {item.price
+                                          ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
+                                          : "Enter an amount in Step 2"}
                                       </Typography>
                                     </Box>
-                                    <ToggleButtonGroup
-                                      exclusive
-                                      value={item.splitMode}
-                                      onChange={(_, nextMode: SplitMode | null) => {
-                                        if (nextMode) {
-                                          setValue(`items.${itemIndex}.splitMode`, nextMode);
-                                        }
-                                      }}
-                                      size="small"
-                                      color="primary"
+                                    <Stack
+                                      direction={{ xs: "column", sm: "row" }}
+                                      spacing={1}
+                                      alignItems={{ sm: "center" }}
                                     >
-                                      <ToggleButton value="even">Even</ToggleButton>
-                                      <ToggleButton value="shares">Shares</ToggleButton>
-                                      <ToggleButton value="percent">Percent</ToggleButton>
-                                    </ToggleButtonGroup>
+                                      {item.splitMode === "shares" && (
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          startIcon={<RestartAltRoundedIcon />}
+                                          onClick={() => resetShareValues(itemIndex)}
+                                        >
+                                          Reset row
+                                        </Button>
+                                      )}
+                                      {item.splitMode === "percent" && (
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          startIcon={<RestartAltRoundedIcon />}
+                                          onClick={() => resetPercentValues(itemIndex)}
+                                        >
+                                          Reset row
+                                        </Button>
+                                      )}
+                                      <ToggleButtonGroup
+                                        exclusive
+                                        value={item.splitMode}
+                                        onChange={(_, nextMode: SplitMode | null) => {
+                                          if (nextMode) {
+                                            setValue(`items.${itemIndex}.splitMode`, nextMode);
+                                          }
+                                        }}
+                                        size="small"
+                                        color="primary"
+                                        sx={{
+                                          alignSelf: { xs: "stretch", md: "center" },
+                                          "& .MuiToggleButton-root": {
+                                            minHeight: 32,
+                                            minWidth: 82,
+                                            px: 1.5,
+                                            textTransform: "none",
+                                            fontWeight: 700
+                                          }
+                                        }}
+                                      >
+                                        <ToggleButton value="even">Even</ToggleButton>
+                                        <ToggleButton value="shares">Shares</ToggleButton>
+                                        <ToggleButton value="percent">Percent</ToggleButton>
+                                      </ToggleButtonGroup>
+                                    </Stack>
                                   </Stack>
 
-                                  <Grid container spacing={1.5}>
+                                  <Grid container spacing={1.25}>
                                     {participants.map((participant, allocationIndex) => {
                                       const allocation = item.allocations[allocationIndex] as
                                         | AllocationFormValue
                                         | undefined;
-                                      const isPayer = payerParticipantId === participant.id;
+                                      const previewPerson = previewPeople.find(
+                                        (person) => person.participantId === participant.id
+                                      );
 
                                       return (
-                                        <Grid size={{ xs: 12, md: 6 }} key={participant.id}>
-                                          <Card
-                                            variant="outlined"
-                                            sx={{
-                                              height: "100%",
-                                              borderColor: isPayer
-                                                ? alpha("#EF5B3C", 0.55)
-                                                : alpha("#1D1D1F", 0.08),
-                                              bgcolor: isPayer ? alpha("#EF5B3C", 0.04) : "transparent"
-                                            }}
-                                          >
-                                            <CardContent>
-                                              <Stack spacing={1.5}>
-                                                <Stack direction="row" spacing={1} alignItems="center">
-                                                  <Typography fontWeight={700}>{participant.name}</Typography>
-                                                  {isPayer && <Chip label="Payer" color="primary" size="small" />}
+                                        <Grid size={{ xs: 12, md: 4 }} key={participant.id}>
+                                            <Card
+                                              variant="outlined"
+                                              sx={{
+                                                height: "100%",
+                                                borderColor: alpha("#1D1D1F", 0.08),
+                                                borderRadius: "20px"
+                                              }}
+                                            >
+                                              <CardContent
+                                                sx={{
+                                                  p: 1.8,
+                                                  height: "100%",
+                                                  display: "grid",
+                                                  gridTemplateRows: "auto 32px 40px",
+                                                  rowGap: 1.25
+                                                }}
+                                              >
+                                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                  <Typography fontWeight={800} fontSize="0.98rem">
+                                                    {participant.name}
+                                                  </Typography>
+                                                  <Typography fontWeight={800} fontSize="0.98rem" color="text.primary">
+                                                    {formatMoneyTrailingSymbol(
+                                                      previewPerson?.consumedCents ?? 0,
+                                                      currency
+                                                    )}
+                                                  </Typography>
                                                 </Stack>
 
-                                                {item.splitMode === "even" && allocation && (
-                                                  <Button
-                                                    variant={allocation.evenIncluded ? "contained" : "outlined"}
-                                                    onClick={() =>
-                                                      setValue(
-                                                        `items.${itemIndex}.allocations.${allocationIndex}.evenIncluded`,
-                                                        !allocation.evenIncluded
-                                                      )
-                                                    }
-                                                  >
-                                                    {allocation.evenIncluded ? "Included" : "Excluded"}
-                                                  </Button>
-                                                )}
+                                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                  <Typography variant="body2" color="text.secondary">
+                                                    {item.splitMode === "even"
+                                                      ? "Even split"
+                                                      : item.splitMode === "shares"
+                                                        ? "Share units"
+                                                        : "Percent"}
+                                                  </Typography>
+                                                  {item.splitMode !== "even" ? (
+                                                    <Button
+                                                      size="small"
+                                                      color="inherit"
+                                                      startIcon={<RemoveCircleOutlineRoundedIcon />}
+                                                      onClick={() =>
+                                                        item.splitMode === "shares"
+                                                          ? zeroShareValue(itemIndex, allocationIndex)
+                                                          : zeroPercentValue(itemIndex, participant.id)
+                                                      }
+                                                      sx={{
+                                                        minWidth: 0,
+                                                        px: 0.75,
+                                                        color: "text.secondary"
+                                                      }}
+                                                    >
+                                                      0
+                                                    </Button>
+                                                  ) : (
+                                                    <Box sx={{ width: 34, height: 24, flexShrink: 0 }} />
+                                                  )}
+                                                </Stack>
 
-                                                {item.splitMode === "shares" && (
-                                                  <TextField
-                                                    label="Share units"
-                                                    fullWidth
-                                                    {...register(
-                                                      `items.${itemIndex}.allocations.${allocationIndex}.shares` as const
-                                                    )}
-                                                  />
-                                                )}
+                                                <Box sx={{ height: 40, display: "flex", alignItems: "stretch" }}>
+                                                  {item.splitMode === "even" && allocation && (
+                                                    <ButtonBase
+                                                      onClick={() => toggleEvenAllocation(itemIndex, allocationIndex)}
+                                                      sx={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                        justifyContent: "flex-start",
+                                                        gap: 1,
+                                                        borderRadius: 1.8,
+                                                        px: 1.25,
+                                                        border: "1px solid",
+                                                        borderColor: allocation.evenIncluded ? "primary.main" : alpha("#1D1D1F", 0.18),
+                                                        bgcolor: allocation.evenIncluded ? "primary.main" : "transparent",
+                                                        color: allocation.evenIncluded ? "primary.contrastText" : "text.primary",
+                                                        fontSize: "0.9rem",
+                                                        fontWeight: 700
+                                                      }}
+                                                    >
+                                                      {allocation.evenIncluded ? (
+                                                        <CheckCircleRoundedIcon fontSize="small" />
+                                                      ) : (
+                                                        <CloseRoundedIcon fontSize="small" />
+                                                      )}
+                                                      {allocation.evenIncluded ? "Included in split" : "Excluded from split"}
+                                                    </ButtonBase>
+                                                  )}
 
-                                                {item.splitMode === "percent" && (
-                                                  <TextField
-                                                    label="Percent"
-                                                    fullWidth
-                                                    {...register(
-                                                      `items.${itemIndex}.allocations.${allocationIndex}.percent` as const
-                                                    )}
-                                                    InputProps={{
-                                                      endAdornment: <InputAdornment position="end">%</InputAdornment>
-                                                    }}
-                                                  />
-                                                )}
-                                              </Stack>
-                                            </CardContent>
-                                          </Card>
+                                                  {item.splitMode === "shares" && allocation && (
+                                                    <TextField
+                                                      label="Share units"
+                                                      fullWidth
+                                                      size="small"
+                                                      type="number"
+                                                      value={allocation.shares}
+                                                      onChange={(event) =>
+                                                        updateShareValue(itemIndex, allocationIndex, event.target.value)
+                                                      }
+                                                      onKeyDown={(event) => {
+                                                        if (event.key === "ArrowUp") {
+                                                          event.preventDefault();
+                                                          nudgeShareValue(itemIndex, allocationIndex, 1);
+                                                        }
+
+                                                        if (event.key === "ArrowDown") {
+                                                          event.preventDefault();
+                                                          nudgeShareValue(itemIndex, allocationIndex, -1);
+                                                        }
+                                                      }}
+                                                      inputProps={{ min: 0, step: 1 }}
+                                                      sx={{ "& .MuiInputBase-root": { height: 40 } }}
+                                                    />
+                                                  )}
+
+                                                  {item.splitMode === "percent" && allocation && (
+                                                    <TextField
+                                                      label="Percent"
+                                                      fullWidth
+                                                      size="small"
+                                                      type="number"
+                                                      value={allocation.percent}
+                                                      onChange={(event) =>
+                                                        updatePercentValue(itemIndex, participant.id, event.target.value)
+                                                      }
+                                                      onKeyDown={(event) => {
+                                                        if (event.key === "ArrowUp") {
+                                                          event.preventDefault();
+                                                          nudgePercentValue(itemIndex, participant.id, 1);
+                                                        }
+
+                                                        if (event.key === "ArrowDown") {
+                                                          event.preventDefault();
+                                                          nudgePercentValue(itemIndex, participant.id, -1);
+                                                        }
+                                                      }}
+                                                      inputProps={{ min: 0, max: 100, step: 0.01 }}
+                                                      InputProps={{
+                                                        endAdornment: <InputAdornment position="end">%</InputAdornment>
+                                                      }}
+                                                      sx={{ "& .MuiInputBase-root": { height: 40 } }}
+                                                    />
+                                                  )}
+                                                </Box>
+                                              </CardContent>
+                                            </Card>
                                         </Grid>
                                       );
                                     })}
                                   </Grid>
 
                                   {allocationError && <Alert severity="error">{allocationError}</Alert>}
-                                  <Alert severity="success" icon={false}>
-                                    {parsedItem
-                                      ? buildShareSummary(
-                                          parsedItem,
-                                          settlement.ok
-                                            ? settlement.data.people.map((person) => ({
-                                                id: person.participantId,
-                                                name: person.name,
-                                                isPayer: person.isPayer
-                                              }))
-                                            : [],
-                                          currency
-                                        )
-                                      : "Finish the row and the per-person preview will appear here."}
-                                  </Alert>
                                 </Stack>
                               </SortableCard>
                             );
@@ -887,99 +1281,147 @@ function App() {
                 )}
 
                 {activeStep === 3 && settlement.ok && (
-                  <Grid container spacing={3}>
-                    <Grid size={{ xs: 12, lg: 7 }}>
-                      <Card
-                        sx={{
-                          background:
-                            "linear-gradient(135deg, rgba(15,118,110,0.08), rgba(15,118,110,0.02))"
-                        }}
-                      >
-                        <CardContent>
-                          <Stack spacing={2}>
-                            <Typography variant="h2">Who should pay whom</Typography>
-                            <Typography color="text.secondary">
-                              Total receipt: {formatMoney(settlement.data.totalCents, settlement.data.currency)}
-                            </Typography>
-                            {settlement.data.transfers.length > 0 ? (
-                              settlement.data.transfers.map((transfer) => (
-                                <Alert key={transfer.fromParticipantId} severity="success" icon={<PaidRoundedIcon />}>
-                                  {transfer.fromName} pays {transfer.toName}{" "}
-                                  {formatMoney(transfer.amountCents, settlement.data.currency)}
-                                </Alert>
-                              ))
-                            ) : (
-                              <Alert severity="info">Everyone is square already.</Alert>
-                            )}
-
-                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                              <Button
-                                variant="contained"
-                                startIcon={<ContentCopyRoundedIcon />}
-                                onClick={copySummary}
-                              >
-                                Copy summary
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                startIcon={<AutorenewRoundedIcon />}
-                                onClick={startOver}
-                              >
-                                Start over
-                              </Button>
-                            </Stack>
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid size={{ xs: 12, lg: 5 }}>
-                      <Stack spacing={2}>
-                        {settlement.data.people.map((person) => (
-                          <Card key={person.participantId}>
-                            <CardContent>
-                              <Stack spacing={1.25}>
-                                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                  <Stack direction="row" spacing={1} alignItems="center">
-                                    <Typography variant="h3">{person.name}</Typography>
-                                    {person.isPayer && <Chip label="Payer" color="primary" size="small" />}
-                                  </Stack>
-                                  <Chip
-                                    label={
-                                      person.netCents > 0
-                                        ? "Gets reimbursed"
-                                        : person.netCents < 0
-                                          ? "Needs to pay"
-                                          : "Settled"
-                                    }
-                                    color={person.netCents > 0 ? "secondary" : person.netCents < 0 ? "primary" : "default"}
-                                  />
-                                </Stack>
-                                <Divider />
-                                <Stack direction="row" justifyContent="space-between">
-                                  <Typography color="text.secondary">Consumed</Typography>
-                                  <Typography fontWeight={700}>
-                                    {formatMoney(person.consumedCents, settlement.data.currency)}
-                                  </Typography>
-                                </Stack>
-                                <Stack direction="row" justifyContent="space-between">
-                                  <Typography color="text.secondary">Paid</Typography>
-                                  <Typography fontWeight={700}>
-                                    {formatMoney(person.paidCents, settlement.data.currency)}
-                                  </Typography>
-                                </Stack>
-                                <Stack direction="row" justifyContent="space-between">
-                                  <Typography color="text.secondary">Net</Typography>
-                                  <Typography fontWeight={800}>
-                                    {formatMoney(person.netCents, settlement.data.currency)}
-                                  </Typography>
-                                </Stack>
-                              </Stack>
-                            </CardContent>
-                          </Card>
-                        ))}
+                  <Stack spacing={2.5}>
+                    <Stack
+                      direction={{ xs: "column", md: "row" }}
+                      spacing={1.5}
+                      justifyContent="space-between"
+                      alignItems={{ md: "center" }}
+                    >
+                      <Box>
+                        <Typography variant="h2">Final balances</Typography>
+                        <Typography color="text.secondary">
+                          Total receipt: {formatMoney(settlement.data.totalCents, settlement.data.currency)}
+                        </Typography>
+                      </Box>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                        <Button
+                          variant="contained"
+                          startIcon={<ContentCopyRoundedIcon />}
+                          onClick={copySummary}
+                        >
+                          Copy summary
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<PictureAsPdfRoundedIcon />}
+                          onClick={exportSummaryPdf}
+                          disabled={exportPdfPending}
+                        >
+                          {exportPdfPending ? "Exporting PDF..." : "Export PDF"}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<AutorenewRoundedIcon />}
+                          onClick={startOver}
+                        >
+                          Start over
+                        </Button>
                       </Stack>
-                    </Grid>
-                  </Grid>
+                    </Stack>
+
+                    {(() => {
+                      const payer = settlement.data.people.find((person) => person.isPayer);
+                      const payees = settlement.data.people.filter((person) => !person.isPayer);
+
+                      return (
+                        <Stack spacing={1.5}>
+                          {payer && (
+                            <Card variant="outlined" sx={{ borderRadius: "20px", borderColor: alpha("#EF5B3C", 0.24) }}>
+                              <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+                                <Stack spacing={2}>
+                                  <Stack
+                                    direction={{ xs: "column", md: "row" }}
+                                    spacing={1.5}
+                                    justifyContent="space-between"
+                                    alignItems={{ md: "center" }}
+                                  >
+                                    <Box>
+                                      <Typography variant="overline" color="text.secondary">
+                                        Payer
+                                      </Typography>
+                                      <Typography variant="h4">
+                                        {payer.name}
+                                      </Typography>
+                                      <Typography color="text.secondary">
+                                        This is the person who paid the full receipt and should be reimbursed.
+                                      </Typography>
+                                    </Box>
+                                    <Chip
+                                      label={`Collect ${formatMoney(payer.netCents, settlement.data.currency)}`}
+                                      color="primary"
+                                      variant="outlined"
+                                      sx={{ fontWeight: 800 }}
+                                    />
+                                  </Stack>
+
+                                  <Grid container spacing={1.5}>
+                                    {[
+                                      { label: "Paid", value: formatMoney(payer.paidCents, settlement.data.currency) },
+                                      {
+                                        label: "Consumed",
+                                        value: formatMoney(payer.consumedCents, settlement.data.currency)
+                                      },
+                                      {
+                                        label: "Gets back",
+                                        value: formatMoney(payer.netCents, settlement.data.currency)
+                                      }
+                                    ].map((metric) => (
+                                      <Grid size={{ xs: 12, md: 4 }} key={metric.label}>
+                                        <Box
+                                          sx={{
+                                            p: 1.75,
+                                            borderRadius: "20px",
+                                            bgcolor: alpha("#1D1D1F", 0.03)
+                                          }}
+                                        >
+                                          <Typography color="text.secondary">{metric.label}</Typography>
+                                          <Typography variant="h5">
+                                            {metric.value}
+                                          </Typography>
+                                        </Box>
+                                      </Grid>
+                                    ))}
+                                  </Grid>
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {payees.length > 0 && (
+                            <Stack spacing={1.5}>
+                              <Typography variant="h3">Who owes</Typography>
+                              <Grid container spacing={1.5}>
+                                {payees.map((person) => (
+                                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={person.participantId}>
+                                    <Card
+                                      variant="outlined"
+                                      sx={{
+                                        height: "100%",
+                                        borderRadius: "20px",
+                                        borderColor: alpha("#1D1D1F", 0.1)
+                                      }}
+                                    >
+                                        <CardContent sx={{ p: 2 }}>
+                                          <Stack spacing={0.75}>
+                                            <Typography variant="h6" fontWeight={800}>
+                                              {person.name}
+                                            </Typography>
+                                            <Typography variant="h4" color="primary.main" fontWeight={900}>
+                                              {formatMoney(Math.abs(person.netCents), settlement.data.currency)}
+                                            </Typography>
+                                          </Stack>
+                                        </CardContent>
+                                    </Card>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            </Stack>
+                          )}
+                        </Stack>
+                      );
+                    })()}
+                  </Stack>
                 )}
 
                 {activeStep === 3 && !settlement.ok && (
@@ -1011,8 +1453,8 @@ function App() {
               </Stack>
             </CardContent>
           </Card>
-        </Stack>
-      </Box>
+        </Box>
+      )}
 
       <Dialog open={showRestoreDialog}>
         <DialogTitle>Restore your last split?</DialogTitle>
@@ -1038,6 +1480,18 @@ function App() {
       <Snackbar open={copyNoticeOpen} autoHideDuration={3000} onClose={() => setCopyNoticeOpen(false)}>
         <Alert severity="success" variant="filled">
           Summary copied.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar open={pdfNoticeOpen} autoHideDuration={3000} onClose={() => setPdfNoticeOpen(false)}>
+        <Alert severity="success" variant="filled">
+          PDF exported.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar open={pdfErrorNoticeOpen} autoHideDuration={3500} onClose={() => setPdfErrorNoticeOpen(false)}>
+        <Alert severity="error" variant="filled">
+          PDF export failed.
         </Alert>
       </Snackbar>
     </Box>

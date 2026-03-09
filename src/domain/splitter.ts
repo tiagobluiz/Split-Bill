@@ -10,6 +10,7 @@ export type AllocationFormValue = {
   evenIncluded: boolean;
   shares: string;
   percent: string;
+  percentLocked?: boolean;
 };
 
 export type ItemFormValue = {
@@ -130,25 +131,132 @@ export function createAllocation(participantId: string): AllocationFormValue {
     participantId,
     evenIncluded: true,
     shares: "1",
-    percent: "0"
+    percent: "0",
+    percentLocked: false
   };
 }
 
+function formatPercentFromBasisPoints(basisPoints: number) {
+  const whole = Math.floor(basisPoints / 100);
+  const fraction = basisPoints % 100;
+
+  if (fraction === 0) {
+    return String(whole);
+  }
+
+  return `${whole}.${fraction.toString().padStart(2, "0").replace(/0$/, "")}`;
+}
+
+export function createDefaultPercentValues(participantCount: number) {
+  if (participantCount <= 0) {
+    return [];
+  }
+
+  const totalBasisPoints = 10_000;
+  const base = Math.floor(totalBasisPoints / participantCount);
+  const remainder = totalBasisPoints - base * participantCount;
+
+  return Array.from({ length: participantCount }, (_, index) =>
+    formatPercentFromBasisPoints(base + (index < remainder ? 1 : 0))
+  );
+}
+
+function withDefaultPercentages(allocations: AllocationFormValue[]) {
+  const defaults = createDefaultPercentValues(allocations.length);
+
+  return allocations.map((allocation, index) => ({
+    ...allocation,
+    percent: defaults[index] ?? "0",
+    percentLocked: false
+  }));
+}
+
+export function resetShareAllocations(allocations: AllocationFormValue[]) {
+  return allocations.map((allocation) => ({
+    ...allocation,
+    shares: "1"
+  }));
+}
+
+export function resetPercentAllocations(allocations: AllocationFormValue[]) {
+  return withDefaultPercentages(allocations);
+}
+
+export function rebalancePercentAllocations(
+  allocations: AllocationFormValue[],
+  changedParticipantId: string,
+  nextPercentValue: string
+) {
+  const changedPercent = parseDecimal(nextPercentValue);
+  if (changedPercent === null || changedPercent < 0) {
+    return null;
+  }
+
+  const changedBasisPoints = Math.round(changedPercent * 100);
+  const fixedAllocations = allocations.filter(
+    (allocation) => allocation.participantId !== changedParticipantId && Boolean(allocation.percentLocked)
+  );
+  const fixedBasisPoints = fixedAllocations.reduce((sum, allocation) => {
+    const currentPercent = parseDecimal(allocation.percent) ?? 0;
+    return sum + Math.round(currentPercent * 100);
+  }, 0);
+
+  if (fixedBasisPoints + changedBasisPoints > 10_000) {
+    return null;
+  }
+
+  const dynamicAllocations = allocations.filter(
+    (allocation) => allocation.participantId !== changedParticipantId && !allocation.percentLocked
+  );
+  const remainingBasisPoints = 10_000 - fixedBasisPoints - changedBasisPoints;
+
+  if (dynamicAllocations.length === 0 && remainingBasisPoints !== 0) {
+    return null;
+  }
+
+  const base = dynamicAllocations.length > 0 ? Math.floor(remainingBasisPoints / dynamicAllocations.length) : 0;
+  const remainder = dynamicAllocations.length > 0 ? remainingBasisPoints % dynamicAllocations.length : 0;
+  const dynamicBasisById = new Map(
+    dynamicAllocations.map((allocation, index) => [
+      allocation.participantId,
+      base + (index < remainder ? 1 : 0)
+    ])
+  );
+
+  return allocations.map((allocation) => {
+    if (allocation.participantId === changedParticipantId) {
+      return {
+        ...allocation,
+        percent: formatPercentFromBasisPoints(changedBasisPoints),
+        percentLocked: true
+      };
+    }
+
+    if (allocation.percentLocked) {
+      return {
+        ...allocation,
+        percent: formatPercentFromBasisPoints(Math.round((parseDecimal(allocation.percent) ?? 0) * 100)),
+        percentLocked: true
+      };
+    }
+
+    return {
+      ...allocation,
+      percent: formatPercentFromBasisPoints(dynamicBasisById.get(allocation.participantId) ?? 0),
+      percentLocked: false
+    };
+  });
+}
+
 export function createEmptyItem(participants: ParticipantFormValue[]): ItemFormValue {
-  const allocations = participants.map((participant) => createAllocation(participant.id));
-  const participantCount = participants.length;
-  const defaultPercent =
-    participantCount > 0 ? (100 / participantCount).toFixed(2).replace(/\.00$/, "") : "0";
+  const allocations = withDefaultPercentages(participants.map((participant) => createAllocation(participant.id)));
 
   return {
     id: createId(),
     name: "",
     price: "",
     splitMode: "even",
-    allocations: allocations.map((allocation) => ({
-      ...allocation,
-      percent: defaultPercent
-    }))
+    allocations
   };
 }
 
@@ -166,9 +274,7 @@ export function syncItemAllocations(
   participants: ParticipantFormValue[]
 ) {
   const participantIds = new Set(participants.map((participant) => participant.id));
-  const participantCount = participants.length;
-  const defaultPercent =
-    participantCount > 0 ? (100 / participantCount).toFixed(2).replace(/\.00$/, "") : "0";
+  const defaultPercentages = createDefaultPercentValues(participants.length);
 
   return items.map((item) => {
     const allocationByParticipant = new Map(
@@ -181,14 +287,18 @@ export function syncItemAllocations(
         const existing = allocationByParticipant.get(participant.id);
 
         if (existing) {
-          return existing;
+          return {
+            ...existing,
+            percentLocked: existing.percentLocked ?? false
+          };
         }
 
         return {
           participantId: participant.id,
           evenIncluded: true,
           shares: "1",
-          percent: defaultPercent
+          percent: defaultPercentages[participants.findIndex((entry) => entry.id === participant.id)] ?? "0",
+          percentLocked: false
         };
       }).filter((allocation) => participantIds.has(allocation.participantId))
     };
@@ -199,7 +309,7 @@ function trimName(name: string) {
   return name.trim().replace(/\s+/g, " ");
 }
 
-function parseMoneyToCents(value: string) {
+export function parseMoneyToCents(value: string) {
   const normalized = value.trim().replace(/\s/g, "").replace(",", ".");
   if (!normalized) {
     return null;
@@ -294,6 +404,88 @@ function allocateByWeights(
   return weights.map((entry) => ({
     participantId: entry.participantId,
     amountCents: (allocated.get(entry.participantId) ?? 0) * Math.sign(amountCents || 1)
+  }));
+}
+
+function allocateExactByWeights(
+  amountCents: number,
+  weights: Array<{ participantId: string; weight: number }>
+) {
+  const weightedParticipants = weights.filter((entry) => entry.weight > 0);
+  const totalWeight = weightedParticipants.reduce((sum, entry) => sum + entry.weight, 0);
+
+  if (weightedParticipants.length === 0 || totalWeight <= 0) {
+    return null;
+  }
+
+  return weights.map((entry) => ({
+    participantId: entry.participantId,
+    amountCents: entry.weight > 0 ? (amountCents * entry.weight) / totalWeight : 0
+  }));
+}
+
+function roundAggregateShares(
+  exactTotals: Array<{ participantId: string; amountCents: number }>,
+  participants: ParsedParticipant[],
+  targetTotalCents: number
+) {
+  const bases = exactTotals.map((entry) => ({
+    participantId: entry.participantId,
+    base: Math.trunc(entry.amountCents),
+    residual: entry.amountCents - Math.trunc(entry.amountCents)
+  }));
+
+  let delta = targetTotalCents - bases.reduce((sum, entry) => sum + entry.base, 0);
+  const roundedByParticipant = new Map(
+    bases.map((entry) => [entry.participantId, entry.base])
+  );
+
+  const sortForDelta = (direction: 1 | -1) =>
+    [...bases].sort((left, right) => {
+      const leftParticipant = participants.find((participant) => participant.id === left.participantId);
+      const rightParticipant = participants.find((participant) => participant.id === right.participantId);
+      const payerBias = Number(Boolean(leftParticipant?.isPayer)) - Number(Boolean(rightParticipant?.isPayer));
+
+      if (payerBias !== 0) {
+        return payerBias;
+      }
+
+      if (direction > 0 && right.residual !== left.residual) {
+        return right.residual - left.residual;
+      }
+
+      if (direction < 0 && left.residual !== right.residual) {
+        return left.residual - right.residual;
+      }
+
+      return (
+        weightOrderIndex(left.participantId, participants) -
+        weightOrderIndex(right.participantId, participants)
+      );
+    });
+
+  const orderedForAdd = sortForDelta(1);
+  const orderedForSubtract = sortForDelta(-1);
+  let addCursor = 0;
+  let subtractCursor = 0;
+
+  while (delta > 0 && orderedForAdd.length > 0) {
+    const entry = orderedForAdd[addCursor % orderedForAdd.length];
+    roundedByParticipant.set(entry.participantId, (roundedByParticipant.get(entry.participantId) ?? 0) + 1);
+    delta -= 1;
+    addCursor += 1;
+  }
+
+  while (delta < 0 && orderedForSubtract.length > 0) {
+    const entry = orderedForSubtract[subtractCursor % orderedForSubtract.length];
+    roundedByParticipant.set(entry.participantId, (roundedByParticipant.get(entry.participantId) ?? 0) - 1);
+    delta += 1;
+    subtractCursor += 1;
+  }
+
+  return exactTotals.map((entry) => ({
+    participantId: entry.participantId,
+    amountCents: roundedByParticipant.get(entry.participantId) ?? 0
   }));
 }
 
@@ -526,11 +718,34 @@ export function computeSettlement(values: SplitFormValues) {
     };
   }
 
+  const exactTotalsByParticipant = new Map(parsed.data.participants.map((participant) => [participant.id, 0]));
+
+  values.items.forEach((item) => {
+    const amountCents = parseMoneyToCents(item.price) ?? 0;
+    const exactShares = allocateExactByWeights(amountCents, allocationsForItem(item));
+
+    exactShares?.forEach((share) => {
+      exactTotalsByParticipant.set(
+        share.participantId,
+        (exactTotalsByParticipant.get(share.participantId) ?? 0) + share.amountCents
+      );
+    });
+  });
+
+  const roundedTotals = roundAggregateShares(
+    parsed.data.participants.map((participant) => ({
+      participantId: participant.id,
+      amountCents: exactTotalsByParticipant.get(participant.id) ?? 0
+    })),
+    parsed.data.participants,
+    totalCents
+  );
+  const roundedTotalsByParticipant = new Map(
+    roundedTotals.map((entry) => [entry.participantId, entry.amountCents])
+  );
+
   const people = parsed.data.participants.map((participant) => {
-    const consumedCents = parsed.data.items.reduce((sum, item) => {
-      const share = item.shares.find((entry) => entry.participantId === participant.id);
-      return sum + (share?.amountCents ?? 0);
-    }, 0);
+    const consumedCents = roundedTotalsByParticipant.get(participant.id) ?? 0;
     const paidCents = participant.isPayer ? totalCents : 0;
 
     return {
@@ -566,6 +781,20 @@ export function computeSettlement(values: SplitFormValues) {
   };
 }
 
+export function computeItemPreview(
+  item: ItemFormValue,
+  participants: ParticipantFormValue[],
+  payerParticipantId: string,
+  currency: string
+) {
+  return computeSettlement({
+    currency,
+    participants,
+    payerParticipantId,
+    items: [item]
+  });
+}
+
 export function formatMoney(amountCents: number, currency: string, locale = navigator.language) {
   return new Intl.NumberFormat(locale, {
     style: "currency",
@@ -573,6 +802,28 @@ export function formatMoney(amountCents: number, currency: string, locale = navi
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(amountCents / 100);
+}
+
+export function formatMoneyTrailingSymbol(
+  amountCents: number,
+  currency: string,
+  locale = navigator.language
+) {
+  const parts = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).formatToParts(amountCents / 100);
+
+  const currencyPart = parts.find((part) => part.type === "currency")?.value ?? currency;
+  const numberPart = parts
+    .filter((part) => part.type !== "currency" && part.type !== "literal")
+    .map((part) => part.value)
+    .join("");
+
+  return `${numberPart}${currencyPart}`;
 }
 
 export function buildShareSummary(item: ParsedItem, participants: ParsedParticipant[], currency: string) {
