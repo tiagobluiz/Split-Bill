@@ -8,6 +8,8 @@ export default tseslint.config(
   {
     ignores: [
       "dist",
+      "playwright-results",
+      "playwright-results-receipt-import",
       "playwright-report",
       "test-results",
       "apps/**",

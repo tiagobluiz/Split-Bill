@@ -6,12 +6,17 @@ import App from "./App";
 import { STORAGE_KEY } from "./domain/splitter";
 import { appTheme } from "./theme";
 
-const { exportSettlementPdfMock } = vi.hoisted(() => ({
-  exportSettlementPdfMock: vi.fn()
+const { exportSettlementPdfMock, importReceiptMock } = vi.hoisted(() => ({
+  exportSettlementPdfMock: vi.fn(),
+  importReceiptMock: vi.fn()
 }));
 
 vi.mock("./pdf/exportSettlementPdf", () => ({
   exportSettlementPdf: exportSettlementPdfMock
+}));
+
+vi.mock("./receipt-import/importReceipt", () => ({
+  importReceipt: importReceiptMock
 }));
 
 function renderApp() {
@@ -47,6 +52,7 @@ describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
     exportSettlementPdfMock.mockReset();
+    importReceiptMock.mockReset();
   });
 
   afterEach(() => {
@@ -225,4 +231,65 @@ describe("App", () => {
     });
     expect(await screen.findByText("PDF exported.")).toBeInTheDocument();
   });
+
+  it("imports a receipt in step 2 and appends editable items", async () => {
+    importReceiptMock.mockResolvedValueOnce({
+      source: "image",
+      fileName: "receipt.png",
+      rawText: "Apples 2.49\nBread 1.20",
+      items: [
+        { name: "Apples", price: "2.49" },
+        { name: "Bread", price: "1.20" }
+      ],
+      warnings: [{ code: "ignored-summary-lines", message: "Ignored 1 total or payment lines." }]
+    });
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+    await user.click(getAddItemButton());
+    await user.type(screen.getByLabelText("Item name"), "Milk");
+    await user.type(screen.getByLabelText("Price"), "5.00");
+
+    const file = new File(["mock"], "receipt.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("Import receipt file"), file);
+
+    expect(importReceiptMock).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/Imported 2 items from receipt\.png/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Milk")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Apples")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bread")).toBeInTheDocument();
+    expect(screen.getByText("Ignored 1 total or payment lines.")).toBeInTheDocument();
+  });
+
+  it(
+    "resets all step 2 items at once",
+    async () => {
+      const user = userEvent.setup();
+      renderApp();
+
+      await user.click(screen.getByRole("button", { name: "Start splitting" }));
+      await addParticipant(user, "Ana");
+      await addParticipant(user, "Bruno");
+      await user.click(getContinueButton());
+
+      await user.click(getAddItemButton());
+      await user.type(screen.getAllByLabelText("Item name")[0] as HTMLElement, "Milk");
+      await user.type(screen.getAllByLabelText("Price")[0] as HTMLElement, "5.00");
+      await user.click(getAddItemButton());
+      await user.type(screen.getAllByLabelText("Item name")[1] as HTMLElement, "Bread");
+      await user.type(screen.getAllByLabelText("Price")[1] as HTMLElement, "2.00");
+
+      await user.click(screen.getByRole("button", { name: "Reset items" }));
+
+      expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue("Bread")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add item" })).toBeInTheDocument();
+    },
+    15000
+  );
 });
