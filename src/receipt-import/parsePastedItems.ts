@@ -20,7 +20,7 @@ const PASTE_SUMMARY_LABELS = [
 function normalizePrice(rawValue: string) {
   const cleaned = rawValue
     .trim()
-    .replace(/[€$£]|eur|usd|gbp/gi, "")
+    .replace(/[\u20AC\u0024\u00A3]|eur|usd|gbp/gi, "")
     .replace(/\s+/g, "");
 
   if (!cleaned) {
@@ -56,8 +56,10 @@ function parseLineFormat(line: string) {
   }
 
   const withoutPrefix = trimmed.replace(/^(?:[-*]\s*|\d+[.)]\s*)/, "").trim();
+  const separatorMatch = withoutPrefix.match(
+    /^(.*?)(?:\s+-\s+|:\s*)([-\d.,\s\u20AC\u0024\u00A3A-Za-z]+)$/
+  );
 
-  const separatorMatch = withoutPrefix.match(/^(.*?)(?:\s+-\s+|:\s*)([-\d.,\s€$£A-Za-z]+)$/);
   if (!separatorMatch) {
     return null;
   }
@@ -79,7 +81,8 @@ function parseTrailingPriceLine(line: string) {
   }
 
   const withoutPrefix = trimmed.replace(/^(?:[-*]\s*|\d+[.)]\s*)/, "").trim();
-  const trailingPriceMatch = withoutPrefix.match(/^(.*\S)\s+([-\d.,â‚¬$Â£A-Za-z]+)$/);
+  const trailingPriceMatch = withoutPrefix.match(/^(.*\S)\s+([-\d.,\u20AC\u0024\u00A3A-Za-z]+)$/);
+
   if (!trailingPriceMatch) {
     return null;
   }
@@ -149,6 +152,7 @@ export function parsePastedItems(input: string): ParsedPasteImportResult {
   });
 
   const warnings: ReceiptImportWarning[] = [];
+
   if (ignoredLines.length > 0) {
     warnings.push({
       code: "ignored-paste-lines",

@@ -66,6 +66,7 @@ import {
   startTransition,
   useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -757,7 +758,7 @@ function App() {
     queueImportedItems(result.items, result.warnings.map((warning) => warning.message), "pasted list");
   }
 
-  const parsedPasteResult = parsePastedItems(pasteInput);
+  const parsedPasteResult = useMemo(() => parsePastedItems(pasteInput), [pasteInput]);
   const settlement = computeSettlement(deferredValues);
 
   return (
