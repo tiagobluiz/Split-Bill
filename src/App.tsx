@@ -189,7 +189,7 @@ function App() {
   const [hasStarted, setHasStarted] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [hasUnlockedFullNavigation, setHasUnlockedFullNavigation] = useState(
-    Boolean(storedDraft?.hasUnlockedFullNavigation || (storedDraft?.step ?? 0) >= 1)
+    Boolean(storedDraft?.hasUnlockedFullNavigation || (storedDraft?.step ?? 0) >= 2)
   );
   const [participantInput, setParticipantInput] = useState("");
   const [showRestoreDialog, setShowRestoreDialog] = useState(Boolean(storedDraft));
@@ -260,6 +260,16 @@ function App() {
     });
   }, [activeStep, hasUnlockedFullNavigation, showRestoreDialog, watchedValues]);
 
+  useEffect(() => {
+    if (hasUnlockedFullNavigation || activeStep < 1) {
+      return;
+    }
+
+    if (validateStepTwo(watchedValues).length === 0) {
+      setHasUnlockedFullNavigation(true);
+    }
+  }, [activeStep, hasUnlockedFullNavigation, watchedValues]);
+
   function applyStepErrors(stepErrors: Array<{ path: string; message: string }>) {
     stepErrors.forEach((error) => {
       setError(error.path as never, {
@@ -299,7 +309,7 @@ function App() {
     }
 
     const nextStep = Math.min(activeStep + 1, STEP_LABELS.length - 1);
-    if (nextStep >= 1) {
+    if (nextStep >= 2) {
       setHasUnlockedFullNavigation(true);
     }
 
@@ -315,7 +325,23 @@ function App() {
   }
 
   function canNavigateToStep(targetStep: number) {
-    return hasUnlockedFullNavigation || targetStep <= 1;
+    if (hasUnlockedFullNavigation) {
+      return true;
+    }
+
+    if (targetStep === 0) {
+      return true;
+    }
+
+    if (targetStep === 1) {
+      return validateStepOne(getValues()).length === 0;
+    }
+
+    if (targetStep >= 2 && activeStep >= 1) {
+      return validateStepTwo(getValues()).length === 0;
+    }
+
+    return false;
   }
 
   function handleStepNavigation(targetStep: number) {
@@ -323,7 +349,7 @@ function App() {
       return;
     }
 
-    if (targetStep >= 1) {
+    if (targetStep >= 2) {
       setHasUnlockedFullNavigation(true);
     }
 
@@ -618,7 +644,7 @@ function App() {
 
     reset(storedDraft.values);
     setActiveStep(storedDraft.step);
-    setHasUnlockedFullNavigation(Boolean(storedDraft.hasUnlockedFullNavigation || storedDraft.step >= 1));
+    setHasUnlockedFullNavigation(Boolean(storedDraft.hasUnlockedFullNavigation || storedDraft.step >= 2));
     setHasStarted(true);
     setShowRestoreDialog(false);
     setSaveNoticeOpen(true);
