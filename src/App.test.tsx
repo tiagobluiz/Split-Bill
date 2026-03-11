@@ -11,6 +11,9 @@ const { exportSettlementPdfMock, importReceiptMock } = vi.hoisted(() => ({
   importReceiptMock: vi.fn()
 }));
 
+const clipboardWriteTextMock = vi.fn();
+const windowOpenMock = vi.fn();
+
 vi.mock("./pdf/exportSettlementPdf", () => ({
   exportSettlementPdf: exportSettlementPdfMock
 }));
@@ -53,6 +56,19 @@ describe("App", () => {
     window.localStorage.clear();
     exportSettlementPdfMock.mockReset();
     importReceiptMock.mockReset();
+    clipboardWriteTextMock.mockReset();
+    clipboardWriteTextMock.mockResolvedValue(undefined);
+    windowOpenMock.mockReset();
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: clipboardWriteTextMock
+      }
+    });
+    Object.defineProperty(window, "open", {
+      configurable: true,
+      value: windowOpenMock
+    });
   });
 
   afterEach(() => {
@@ -140,7 +156,9 @@ describe("App", () => {
     15000
   );
 
-  it("removes a trailing empty item on enter and advances to the split grid", async () => {
+  it(
+    "removes a trailing empty item on enter and advances to the split grid",
+    async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -161,7 +179,9 @@ describe("App", () => {
 
     expect(getStepButton("Go to step 3: Consumption grid", false)).toHaveAttribute("aria-current", "step");
     expect(screen.getAllByText(/2\.50/).length).toBeGreaterThan(0);
-  });
+    },
+    15000
+  );
 
   it("allows direct step navigation only within the unlocked range", async () => {
     const user = userEvent.setup();
@@ -173,9 +193,9 @@ describe("App", () => {
     expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
     expect(disabledStep3).toHaveAttribute("aria-disabled", "true");
 
-    await user.click(getStepButton("Go to step 2: Consumption", false));
+    await user.click(getStepButton("Go to step 2: Items & prices", false));
     expect(await screen.findAllByRole("button", { name: "Add item" })).not.toHaveLength(0);
-    expect(getStepButton("Go to step 2: Consumption", false)).toHaveAttribute("aria-current", "step");
+    expect(getStepButton("Go to step 2: Items & prices", false)).toHaveAttribute("aria-current", "step");
 
     await user.click(getStepButton("Go to step 1: People & payer", false));
     expect(getStepButton("Go to step 1: People & payer", false)).toHaveAttribute("aria-current", "step");
@@ -197,7 +217,9 @@ describe("App", () => {
     expect(screen.queryByText("Quick flow")).not.toBeInTheDocument();
   });
 
-  it("shows export pdf in results and exposes a loading state while exporting", async () => {
+  it(
+    "shows export pdf in results and exposes a loading state while exporting",
+    async () => {
     let resolveExport = () => {};
     exportSettlementPdfMock.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -230,7 +252,9 @@ describe("App", () => {
       expect(screen.getByRole("button", { name: "Export PDF" })).toBeEnabled();
     });
     expect(await screen.findByText("PDF exported.")).toBeInTheDocument();
-  });
+    },
+    15000
+  );
 
   it("imports a receipt in step 2 and appends editable items", async () => {
     importReceiptMock.mockResolvedValueOnce({
@@ -257,6 +281,7 @@ describe("App", () => {
 
     const file = new File(["mock"], "receipt.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("Import receipt file"), file);
+    await user.click(screen.getByRole("button", { name: "Apply import" }));
 
     expect(importReceiptMock).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/Imported 2 items from receipt\.png/)).toBeInTheDocument();
@@ -265,6 +290,111 @@ describe("App", () => {
     expect(screen.getByDisplayValue("Bread")).toBeInTheDocument();
     expect(screen.getByText("Ignored 1 total or payment lines.")).toBeInTheDocument();
   });
+
+  it("opens provider handoff, launches the selected provider, and moves into paste mode", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+    expect(screen.getByDisplayValue(/Read the uploaded grocery receipt/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "ChatGPT" }));
+
+    expect(windowOpenMock).toHaveBeenCalledWith("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
+  });
+
+  it("opens the paste dialog after manually copying the ai prompt", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+    expect(screen.getByText("Expected answer format")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy prompt" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/Read the uploaded grocery receipt/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Copy prompt" }));
+
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
+  });
+
+  it("does not open the paste dialog when the ai handoff dialog is closed normally", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Pasted items")).not.toBeInTheDocument();
+    });
+  });
+
+  it("clears the pasted input with the reset action", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+
+    await user.click(screen.getByRole("button", { name: "Paste list" }));
+    const pastedItemsInput = screen.getByLabelText("Pasted items");
+    await user.type(pastedItemsInput, "Bananas - 2.49");
+
+    expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(screen.getByLabelText("Pasted items")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+  });
+
+  it(
+    "parses pasted items and can replace the existing item list",
+    async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+    await user.click(getAddItemButton());
+    await user.type(screen.getByLabelText("Item name"), "Milk");
+    await user.type(screen.getByLabelText("Price"), "5.00");
+
+    await user.click(screen.getByRole("button", { name: "Paste list" }));
+    await user.type(screen.getByLabelText("Pasted items"), "Bananas - 2.49{enter}Bread,1.20");
+    expect(screen.getByText(/Parsed 2 items and ignored 0 lines/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Import pasted list" }));
+    await user.click(screen.getByRole("radio", { name: "Replace current items" }));
+    await user.click(screen.getByRole("button", { name: "Apply import" }));
+
+    expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bananas")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Bread")).toBeInTheDocument();
+    expect(await screen.findByText(/Imported 2 items from pasted list/)).toBeInTheDocument();
+    },
+    15000
+  );
 
   it(
     "resets all step 2 items at once",

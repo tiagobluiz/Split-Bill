@@ -5,12 +5,14 @@ import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
+import ContentPasteRoundedIcon from "@mui/icons-material/ContentPasteRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowUpRoundedIcon from "@mui/icons-material/KeyboardArrowUpRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
+import PsychologyAltRoundedIcon from "@mui/icons-material/PsychologyAltRounded";
 import RemoveCircleOutlineRoundedIcon from "@mui/icons-material/RemoveCircleOutlineRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
@@ -44,11 +46,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Grid,
   IconButton,
   InputAdornment,
   LinearProgress,
   MenuItem,
+  Radio,
+  RadioGroup,
   Snackbar,
   Stack,
   TextField,
@@ -61,6 +66,7 @@ import {
   startTransition,
   useDeferredValue,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -88,12 +94,14 @@ import {
   validateStepThree,
   validateStepTwo
 } from "./domain/splitter";
+import { buildReceiptLlmPrompt, getReceiptLlmProviderUrl, type LlmProvider } from "./receipt-import/llmHandoff";
+import { parsePastedItems } from "./receipt-import/parsePastedItems";
 import type { ReceiptImportItem } from "./receipt-import/types";
 import { clearStoredDraft, loadStoredDraft, storeDraft } from "./storage";
 
 const STEP_LABELS = [
   "People & payer",
-  "Consumption",
+  "Items & prices",
   "Consumption grid",
   "Results"
 ] as const;
@@ -187,9 +195,19 @@ function App() {
   const [showRestoreDialog, setShowRestoreDialog] = useState(Boolean(storedDraft));
   const [saveNoticeOpen, setSaveNoticeOpen] = useState(false);
   const [copyNoticeOpen, setCopyNoticeOpen] = useState(false);
+  const [copiedLlmPromptNoticeOpen, setCopiedLlmPromptNoticeOpen] = useState(false);
+  const [llmPromptErrorNoticeOpen, setLlmPromptErrorNoticeOpen] = useState(false);
   const [pdfNoticeOpen, setPdfNoticeOpen] = useState(false);
   const [pdfErrorNoticeOpen, setPdfErrorNoticeOpen] = useState(false);
   const [exportPdfPending, setExportPdfPending] = useState(false);
+  const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [importApplyDialogOpen, setImportApplyDialogOpen] = useState(false);
+  const [importApplyMode, setImportApplyMode] = useState<"append" | "replace">("append");
+  const [pasteInput, setPasteInput] = useState("");
+  const [pendingImportedItems, setPendingImportedItems] = useState<ReceiptImportItem[]>([]);
+  const [pendingImportWarnings, setPendingImportWarnings] = useState<string[]>([]);
+  const [pendingImportSourceLabel, setPendingImportSourceLabel] = useState("");
   const [receiptImportStatus, setReceiptImportStatus] = useState<
     | { state: "idle" }
     | { state: "processing"; fileName: string }
@@ -197,6 +215,7 @@ function App() {
     | { state: "error"; message: string }
   >({ state: "idle" });
   const receiptInputRef = useRef<HTMLInputElement | null>(null);
+  const llmPrompt = buildReceiptLlmPrompt();
 
   const {
     control,
@@ -389,9 +408,12 @@ function App() {
     itemsArray.move(oldIndex, newIndex);
   }
 
-  function appendImportedItems(importedItems: ReceiptImportItem[]) {
+  function applyImportedItems(importedItems: ReceiptImportItem[], mode: "append" | "replace") {
     const currentValues = getValues();
-    const preservedItems = currentValues.items.filter((item) => item.name.trim() || item.price.trim());
+    const preservedItems =
+      mode === "append"
+        ? currentValues.items.filter((item) => item.name.trim() || item.price.trim())
+        : [];
     const mappedItems = importedItems.map((item) => ({
       ...createEmptyItem(currentValues.participants),
       name: item.name,
@@ -402,6 +424,37 @@ function App() {
       ...currentValues,
       items: [...preservedItems, ...mappedItems]
     });
+  }
+
+  function queueImportedItems(importedItems: ReceiptImportItem[], warnings: string[], sourceLabel: string) {
+    setReceiptImportStatus({ state: "idle" });
+    setPendingImportedItems(importedItems);
+    setPendingImportWarnings(warnings);
+    setPendingImportSourceLabel(sourceLabel);
+    setImportApplyMode("append");
+    setImportApplyDialogOpen(true);
+  }
+
+  function confirmImportApply() {
+    applyImportedItems(pendingImportedItems, importApplyMode);
+    setImportApplyDialogOpen(false);
+    setReceiptImportStatus({
+      state: "success",
+      fileName: pendingImportSourceLabel,
+      importedCount: pendingImportedItems.length,
+      warnings: pendingImportWarnings
+    });
+    setPendingImportedItems([]);
+    setPendingImportWarnings([]);
+    setPendingImportSourceLabel("");
+  }
+
+  function closeImportApplyDialog() {
+    setImportApplyDialogOpen(false);
+    setReceiptImportStatus({ state: "idle" });
+    setPendingImportedItems([]);
+    setPendingImportWarnings([]);
+    setPendingImportSourceLabel("");
   }
 
   function handleItemSubmitFromEnter(index: number) {
@@ -646,13 +699,11 @@ function App() {
     try {
       const { importReceipt } = await import("./receipt-import/importReceipt");
       const result = await importReceipt(file);
-      appendImportedItems(result.items);
-      setReceiptImportStatus({
-        state: "success",
-        fileName: result.fileName,
-        importedCount: result.items.length,
-        warnings: result.warnings.map((warning) => warning.message)
-      });
+      queueImportedItems(
+        result.items,
+        result.warnings.map((warning) => warning.message),
+        result.fileName
+      );
     } catch (error) {
       setReceiptImportStatus({
         state: "error",
@@ -661,6 +712,53 @@ function App() {
     }
   }
 
+  async function writeLlmPromptToClipboard() {
+    await navigator.clipboard.writeText(llmPrompt);
+    setCopiedLlmPromptNoticeOpen(true);
+    setLlmPromptErrorNoticeOpen(false);
+  }
+
+  async function launchLlmHandoff(provider: LlmProvider) {
+    window.open(getReceiptLlmProviderUrl(provider), "_blank", "noopener,noreferrer");
+
+    try {
+      await writeLlmPromptToClipboard();
+    } catch {
+      setLlmPromptErrorNoticeOpen(true);
+    }
+
+    setAiDialogOpen(false);
+    setPasteDialogOpen(true);
+  }
+
+  async function copyLlmPrompt() {
+    try {
+      await writeLlmPromptToClipboard();
+    } catch {
+      setLlmPromptErrorNoticeOpen(true);
+    }
+
+    setAiDialogOpen(false);
+    setPasteDialogOpen(true);
+  }
+
+  function handlePastePreviewImport() {
+    const result = parsePastedItems(pasteInput);
+
+    if (result.items.length === 0) {
+      setReceiptImportStatus({
+        state: "error",
+        message: result.warnings[0]?.message ?? "No valid items were detected in the pasted text."
+      });
+      return;
+    }
+
+    setPasteDialogOpen(false);
+    setPasteInput("");
+    queueImportedItems(result.items, result.warnings.map((warning) => warning.message), "pasted list");
+  }
+
+  const parsedPasteResult = useMemo(() => parsePastedItems(pasteInput), [pasteInput]);
   const settlement = computeSettlement(deferredValues);
 
   return (
@@ -983,6 +1081,22 @@ function App() {
                           sx={{ alignSelf: "flex-start" }}
                         >
                           {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<PsychologyAltRoundedIcon />}
+                          onClick={() => setAiDialogOpen(true)}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Ask AI
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<ContentPasteRoundedIcon />}
+                          onClick={() => setPasteDialogOpen(true)}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Paste list
                         </Button>
                       </Stack>
                       <Button
@@ -1593,6 +1707,120 @@ function App() {
         </DialogActions>
       </Dialog>
 
+      <Dialog open={aiDialogOpen} onClose={() => setAiDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Ask ChatGPT, Claude, or Gemini</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              We copy the prompt for you and open the provider in a new tab. Upload the receipt there, then paste
+              the extracted item list back here.
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+              <Button variant="contained" onClick={() => launchLlmHandoff("chatgpt")}>
+                ChatGPT
+              </Button>
+              <Button variant="contained" onClick={() => launchLlmHandoff("claude")}>
+                Claude
+              </Button>
+              <Button variant="contained" onClick={() => launchLlmHandoff("gemini")}>
+                Gemini
+              </Button>
+            </Stack>
+            <Card variant="outlined">
+              <CardContent>
+                <Stack spacing={0.75}>
+                  <Typography variant="subtitle2">Expected answer format</Typography>
+                  <Typography color="text.secondary">One line per item, using:</Typography>
+                  <Typography sx={{ fontFamily: "monospace", fontWeight: 700 }}>Item name - 2.49</Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+            <TextField
+              label="Prompt"
+              value={llmPrompt}
+              multiline
+              minRows={8}
+              InputProps={{ readOnly: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={copyLlmPrompt}>Copy prompt</Button>
+          <Button onClick={() => setAiDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={pasteDialogOpen} onClose={() => setPasteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Paste item list</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              Paste one item per line. The easiest format is <strong>Bananas - 2.49</strong>.
+            </Typography>
+            <TextField
+              label="Pasted items"
+              value={pasteInput}
+              onChange={(event) => setPasteInput(event.target.value)}
+              multiline
+              minRows={10}
+              placeholder={"Bananas - 2.49\nMilk - 3.40\nBread - 1.20"}
+            />
+            <Card variant="outlined">
+              <CardContent>
+                <Stack spacing={0.75}>
+                  <Typography variant="subtitle2">Accepted formats</Typography>
+                  <Typography color="text.secondary">Bananas - 2.49</Typography>
+                  <Typography color="text.secondary">1. Bananas - 2,49€</Typography>
+                  <Typography color="text.secondary">Bananas: 2.49</Typography>
+                  <Typography color="text.secondary">Bananas,2.49</Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+            {pasteInput.trim() && (
+              <Alert severity={parsedPasteResult.items.length > 0 ? "info" : "warning"}>
+                Parsed {parsedPasteResult.items.length} item{parsedPasteResult.items.length === 1 ? "" : "s"} and
+                ignored {parsedPasteResult.ignoredLines.length} line{parsedPasteResult.ignoredLines.length === 1 ? "" : "s"}.
+                {parsedPasteResult.ignoredLines.length > 0 && (
+                  <> First ignored: {parsedPasteResult.ignoredLines.slice(0, 3).join(" | ")}</>
+                )}
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPasteInput("")} disabled={!pasteInput.trim()}>
+            Reset
+          </Button>
+          <Button onClick={() => setPasteDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handlePastePreviewImport}>
+            Import pasted list
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={importApplyDialogOpen} onClose={closeImportApplyDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>How should we apply these items?</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <Typography color="text.secondary">
+              {pendingImportSourceLabel
+                ? `We found ${pendingImportedItems.length} item${pendingImportedItems.length === 1 ? "" : "s"} from ${pendingImportSourceLabel}.`
+                : `We found ${pendingImportedItems.length} item${pendingImportedItems.length === 1 ? "" : "s"}.`}
+            </Typography>
+            <RadioGroup value={importApplyMode} onChange={(_, value) => setImportApplyMode(value as "append" | "replace")}>
+              <FormControlLabel value="append" control={<Radio />} label="Append to current items" />
+              <FormControlLabel value="replace" control={<Radio />} label="Replace current items" />
+            </RadioGroup>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeImportApplyDialog}>Cancel</Button>
+          <Button variant="contained" onClick={confirmImportApply}>
+            Apply import
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar open={saveNoticeOpen} autoHideDuration={3500} onClose={() => setSaveNoticeOpen(false)}>
         <Alert severity="success" variant="filled">
           Draft restored.
@@ -1602,6 +1830,26 @@ function App() {
       <Snackbar open={copyNoticeOpen} autoHideDuration={3000} onClose={() => setCopyNoticeOpen(false)}>
         <Alert severity="success" variant="filled">
           Summary copied.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={copiedLlmPromptNoticeOpen}
+        autoHideDuration={3000}
+        onClose={() => setCopiedLlmPromptNoticeOpen(false)}
+      >
+        <Alert severity="success" variant="filled">
+          Prompt copied.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={llmPromptErrorNoticeOpen}
+        autoHideDuration={4000}
+        onClose={() => setLlmPromptErrorNoticeOpen(false)}
+      >
+        <Alert severity="warning" variant="filled">
+          Could not copy the prompt automatically. Use the Copy prompt button.
         </Alert>
       </Snackbar>
 
