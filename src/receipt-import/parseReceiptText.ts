@@ -24,7 +24,7 @@ const SUMMARY_KEYWORDS = [
   "pay",
   "troco",
   "a pagar",
-  "talão"
+  "talao"
 ];
 
 const MODIFIER_KEYWORDS = [
@@ -32,6 +32,7 @@ const MODIFIER_KEYWORDS = [
   "promo",
   "coupon",
   "offer",
+  "oferta",
   "desconto"
 ];
 
@@ -51,6 +52,25 @@ const NOTE_KEYWORDS = [
   "telefone",
   "nif"
 ];
+
+const HEADER_KEYWORDS = [
+  "fatura simplificada",
+  "continente",
+  "hipermercados",
+  "descricao",
+  "valor",
+  "cartao cliente",
+  "atcud",
+  "cupoes"
+];
+
+const NORMALIZED_SUMMARY_KEYWORDS = SUMMARY_KEYWORDS.map((keyword) => normalizeKeywordText(keyword));
+const NORMALIZED_MODIFIER_KEYWORDS = MODIFIER_KEYWORDS.map((keyword) => normalizeKeywordText(keyword));
+const NORMALIZED_IGNORED_MODIFIER_KEYWORDS = IGNORE_MODIFIER_KEYWORDS.map((keyword) =>
+  normalizeKeywordText(keyword)
+);
+const NORMALIZED_NOTE_KEYWORDS = NOTE_KEYWORDS.map((keyword) => normalizeKeywordText(keyword));
+const NORMALIZED_HEADER_KEYWORDS = HEADER_KEYWORDS.map((keyword) => normalizeKeywordText(keyword));
 
 const TRAILING_PRICE_PATTERN = /(-?\d[\d\s.,]*[.,]\d{2})\s*$/;
 const QUANTITY_CONTINUATION_PATTERN =
@@ -136,6 +156,10 @@ function normalizeKeywordText(text: string) {
     .toLowerCase();
 }
 
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function countLetters(text: string) {
   return (text.match(/[A-Za-zÀ-ÿ]/g) ?? []).length;
 }
@@ -144,28 +168,41 @@ function countWords(text: string) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-function hasSummaryKeyword(text: string) {
+function hasNormalizedKeyword(text: string, normalizedKeywords: string[]) {
   const normalized = normalizeKeywordText(text);
-  return SUMMARY_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  const normalizedTokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
+
+  return normalizedKeywords.some((keyword) => {
+    if (keyword.includes(" ")) {
+      return new RegExp(`\\b${escapeRegExp(keyword)}\\b`).test(normalized);
+    }
+
+    return normalizedTokens.includes(keyword);
+  });
+}
+
+function hasSummaryKeyword(text: string) {
+  return hasNormalizedKeyword(text, NORMALIZED_SUMMARY_KEYWORDS);
 }
 
 function hasModifierKeyword(text: string) {
-  const normalized = normalizeKeywordText(text);
-  return MODIFIER_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return hasNormalizedKeyword(text, NORMALIZED_MODIFIER_KEYWORDS);
 }
 
 function hasIgnoredModifierKeyword(text: string) {
-  const normalized = normalizeKeywordText(text);
-  return IGNORE_MODIFIER_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return hasNormalizedKeyword(text, NORMALIZED_IGNORED_MODIFIER_KEYWORDS);
 }
 
 function hasNoteKeyword(text: string) {
-  const normalized = normalizeKeywordText(text);
-  return NOTE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return hasNormalizedKeyword(text, NORMALIZED_NOTE_KEYWORDS);
+}
+
+function hasHeaderKeyword(text: string) {
+  return hasNormalizedKeyword(text, NORMALIZED_HEADER_KEYWORDS);
 }
 
 function isHeaderLine(text: string) {
-  return text.endsWith(":");
+  return text.endsWith(":") || hasHeaderKeyword(text);
 }
 
 function isLikelyNoteLine(text: string) {
@@ -176,7 +213,7 @@ function isLikelyNoteLine(text: string) {
   return /[.?!]$/.test(text) && text === text.toLowerCase() && countWords(text) >= 3;
 }
 
-function isLikelyDescriptionLine(text: string) {
+function isLikelyDescriptionLine(line: string, text: string) {
   if (!text || isHeaderLine(text) || hasSummaryKeyword(text) || isLikelyNoteLine(text)) {
     return false;
   }
@@ -185,7 +222,15 @@ function isLikelyDescriptionLine(text: string) {
     return false;
   }
 
-  return countWords(text) <= 10;
+  if (countWords(text) > 10) {
+    return false;
+  }
+
+  if (hasTaxCodePrefix(line)) {
+    return true;
+  }
+
+  return /[a-zà-ÿ]/.test(text) && text !== text.toUpperCase();
 }
 
 function isLikelySummaryLine(text: string) {
@@ -235,7 +280,7 @@ function classifyUnpricedLine(line: string): ClassifiedLine {
     return { kind: "note", text };
   }
 
-  if (isLikelyDescriptionLine(text)) {
+  if (isLikelyDescriptionLine(line, text)) {
     return { kind: "description", text };
   }
 

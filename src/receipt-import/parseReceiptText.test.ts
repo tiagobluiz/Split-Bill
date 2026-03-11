@@ -60,6 +60,16 @@ describe("parseReceiptText", () => {
     expect(result.warnings.some((warning) => warning.code === "no-items-detected")).toBe(true);
   });
 
+  it("warns on empty input", () => {
+    const result = parseReceiptText("   \n   ");
+
+    expect(result.items).toEqual([]);
+    expect(result.warnings).toContainEqual({
+      code: "no-items-detected",
+      message: "No probable receipt items were detected. Try a clearer photo or edit items manually."
+    });
+  });
+
   it("merges wrapped supermarket item descriptions with quantity continuation lines", () => {
     const result = parseReceiptText(`
       Mercearia Doce:
@@ -93,6 +103,21 @@ describe("parseReceiptText", () => {
     expect(result.items).toEqual([{ name: "Iogurte", price: "3.49" }]);
   });
 
+  it("supports multiple discount keywords while keeping valid items", () => {
+    const result = parseReceiptText(`
+      Iogurte 3,49
+      DESCONTO 1,20
+      OFERTA 0,50
+      TOTAL A PAGAR 1,79
+    `);
+
+    expect(result.items).toEqual([
+      { name: "Iogurte", price: "3.49" },
+      { name: "DESCONTO", price: "-1.20" },
+      { name: "OFERTA", price: "-0.50" }
+    ]);
+  });
+
   it("ignores vat distribution footer rows", () => {
     const result = parseReceiptText(`
       (C) BOL GULLON AVELA 220G 1,49
@@ -117,5 +142,17 @@ describe("parseReceiptText", () => {
       code: "ignored-summary-lines",
       message: "Ignored 3 total or payment lines."
     });
+  });
+
+  it("extracts valid items from mixed receipt noise without absorbing merchant headers", () => {
+    const result = parseReceiptText(`
+      CONTINENTE MONTIJO
+      Fatura Simplificada Original
+      (C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79
+      Aprox. fim prazo validade
+      Continente Pay (**** 3879) 53,09
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);
   });
 });

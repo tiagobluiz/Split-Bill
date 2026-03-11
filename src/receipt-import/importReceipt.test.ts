@@ -10,13 +10,20 @@ describe("buildLinesFromPdfTextItems", () => {
       { str: "(C)", transform: [0, 0, 0, 0, 5, 817.75], hasEOL: false },
       { str: "BOL GULLON AVELA 220G", transform: [0, 0, 0, 0, 23, 817.75], hasEOL: true },
       { str: "2 X 1,49", transform: [0, 0, 0, 0, 31, 810.25], hasEOL: false },
-      { str: "2,98", transform: [0, 0, 0, 0, 203, 810.25], hasEOL: true }
+      { str: "2,98", transform: [0, 0, 0, 0, 203, 810.25], hasEOL: true },
+      { str: "Boundary", transform: [0, 0, 0, 0, 5, 800], hasEOL: false },
+      { str: "Case", transform: [0, 0, 0, 0, 60, 798.5], hasEOL: true },
+      { str: "Split", transform: [0, 0, 0, 0, 5, 790], hasEOL: false },
+      { str: "Case", transform: [0, 0, 0, 0, 60, 788.4999], hasEOL: true }
     ]);
 
     expect(lines).toEqual([
       "(C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79",
       "(C) BOL GULLON AVELA 220G",
-      "2 X 1,49 2,98"
+      "2 X 1,49 2,98",
+      "Boundary Case",
+      "Split",
+      "Case"
     ]);
   });
 });

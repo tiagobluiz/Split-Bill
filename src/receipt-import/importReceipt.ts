@@ -18,24 +18,12 @@ type PdfTextItem = {
   transform?: number[];
 };
 
-async function recognizeCanvas(canvas: HTMLCanvasElement) {
+async function recognizeWithTesseract(input: HTMLCanvasElement | File) {
   const { createWorker } = await import("tesseract.js");
   const worker = await createWorker("eng");
 
   try {
-    const result = await worker.recognize(canvas);
-    return result.data.text;
-  } finally {
-    await worker.terminate();
-  }
-}
-
-async function recognizeImageFile(file: File) {
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng");
-
-  try {
-    const result = await worker.recognize(file);
+    const result = await worker.recognize(input);
     return result.data.text;
   } finally {
     await worker.terminate();
@@ -140,7 +128,7 @@ async function extractOcrTextFromPdf(file: File) {
         viewport
       }).promise;
 
-      pageTexts.push(await recognizeCanvas(canvas));
+      pageTexts.push(await recognizeWithTesseract(canvas));
     }
 
     return pageTexts.join("\n");
@@ -177,12 +165,17 @@ export async function importReceipt(file: File): Promise<ReceiptImportResult> {
       };
     }
   } else {
-    rawText = await recognizeImageFile(file);
+    rawText = await recognizeWithTesseract(file);
     parsed = parseReceiptText(rawText);
   }
 
   if (parsed.items.length === 0) {
-    throw new Error(parsed.warnings[0]?.message ?? "No receipt items could be detected.");
+    const warningSummary = parsed.warnings.map((warning) => warning.message).join(" ");
+    const rawTextPreview = rawText.replace(/\s+/g, " ").trim().slice(0, 160);
+    const diagnosticMessage = warningSummary || "No receipt items could be detected.";
+    const previewSuffix = rawTextPreview ? ` Raw text preview: ${rawTextPreview}` : "";
+
+    throw new Error(`${diagnosticMessage}${previewSuffix}`);
   }
 
   return {

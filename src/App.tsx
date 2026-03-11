@@ -1021,8 +1021,8 @@ function App() {
                     )}
 
                     {receiptImportStatus.state === "success" &&
-                      receiptImportStatus.warnings.map((warning) => (
-                        <Alert severity="warning" key={warning}>
+                      receiptImportStatus.warnings.map((warning, index) => (
+                        <Alert severity="warning" key={`${index}-${warning}`}>
                           {warning}
                         </Alert>
                       ))}
