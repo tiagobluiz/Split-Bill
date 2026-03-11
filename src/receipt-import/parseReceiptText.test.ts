@@ -84,6 +84,15 @@ describe("parseReceiptText", () => {
     ]);
   });
 
+  it("uses quantity times unit price when the wrapped line has no explicit total", () => {
+    const result = parseReceiptText(`
+      (A) MASSA ESPIRAIS MILANEZA 500G
+      2 X 1,04
+    `);
+
+    expect(result.items).toEqual([{ name: "MASSA ESPIRAIS MILANEZA 500G", price: "2.08" }]);
+  });
+
   it("ignores supermarket headers and note lines without treating them as items", () => {
     const result = parseReceiptText(`
       Padaria:
@@ -151,6 +160,15 @@ describe("parseReceiptText", () => {
       (C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79
       Aprox. fim prazo validade
       Continente Pay (**** 3879) 53,09
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);
+  });
+
+  it("does not treat tax-prefixed all-caps merchant headers as item descriptions", () => {
+    const result = parseReceiptText(`
+      (C) CONTINENTE BOM DIA
+      (C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79
     `);
 
     expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);

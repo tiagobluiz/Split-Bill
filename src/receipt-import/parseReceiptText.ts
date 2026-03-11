@@ -74,7 +74,7 @@ const NORMALIZED_HEADER_KEYWORDS = HEADER_KEYWORDS.map((keyword) => normalizeKey
 
 const TRAILING_PRICE_PATTERN = /(-?\d[\d\s.,]*[.,]\d{2})\s*$/;
 const QUANTITY_CONTINUATION_PATTERN =
-  /^(?:\d+(?:[.,]\d+)?)\s*[xX]\s+(?<unit>\d[\d.,]*[.,]\d{2})(?:\s+(?<total>-?\d[\d.,]*[.,]\d{2}))?\s*$/;
+  /^(?<quantity>\d+(?:[.,]\d+)?)\s*[xX]\s+(?<unit>\d[\d.,]*[.,]\d{2})(?:\s+(?<total>-?\d[\d.,]*[.,]\d{2}))?\s*$/;
 
 type ParsedPriceCandidate = {
   rawPrice: string;
@@ -226,11 +226,13 @@ function isLikelyDescriptionLine(line: string, text: string) {
     return false;
   }
 
-  if (hasTaxCodePrefix(line)) {
+  const hasMixedCaseText = /[a-zà-ÿ]/.test(text) && text !== text.toUpperCase();
+
+  if (hasMixedCaseText) {
     return true;
   }
 
-  return /[a-zà-ÿ]/.test(text) && text !== text.toUpperCase();
+  return hasTaxCodePrefix(line) && !hasHeaderKeyword(text);
 }
 
 function isLikelySummaryLine(text: string) {
@@ -253,12 +255,20 @@ function extractContinuationAmount(line: string) {
     return null;
   }
 
-  const rawPrice = match.groups?.total ?? match.groups?.unit;
-  if (!rawPrice) {
+  const rawTotal = match.groups?.total;
+  if (rawTotal) {
+    return parsePriceToCents(rawTotal);
+  }
+
+  const rawQuantity = match.groups?.quantity;
+  const rawUnit = match.groups?.unit;
+  const quantity = rawQuantity ? Number(rawQuantity.replace(",", ".")) : Number.NaN;
+  const unitCents = rawUnit ? parsePriceToCents(rawUnit) : null;
+  if (!Number.isFinite(quantity) || unitCents === null) {
     return null;
   }
 
-  return parsePriceToCents(rawPrice);
+  return Math.round(quantity * unitCents);
 }
 
 function classifyUnpricedLine(line: string): ClassifiedLine {
