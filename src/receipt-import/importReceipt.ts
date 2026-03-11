@@ -129,6 +129,10 @@ async function extractOcrTextFromPdf(file: File) {
       }).promise;
 
       pageTexts.push(await recognizeWithTesseract(canvas));
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.width = 0;
+      canvas.height = 0;
+      page.cleanup();
     }
 
     return pageTexts.join("\n");

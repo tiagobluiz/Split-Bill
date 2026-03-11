@@ -103,6 +103,16 @@ describe("parseReceiptText", () => {
     expect(result.items).toEqual([{ name: "Pao de forma", price: "2.19" }]);
   });
 
+  it("ignores punctuated footer note keywords such as www and tel", () => {
+    const result = parseReceiptText(`
+      www.continente.pt
+      tel. 21 123 4567
+      Pao de forma 2,19
+    `);
+
+    expect(result.items).toEqual([{ name: "Pao de forma", price: "2.19" }]);
+  });
+
   it("ignores savings-only lines such as poupanca metadata", () => {
     const result = parseReceiptText(`
       Iogurte 3,49

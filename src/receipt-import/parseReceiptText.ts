@@ -156,6 +156,10 @@ function normalizeKeywordText(text: string) {
     .toLowerCase();
 }
 
+function normalizeKeywordToken(text: string) {
+  return normalizeKeywordText(text).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function escapeRegExp(text: string) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -173,11 +177,16 @@ function hasNormalizedKeyword(text: string, normalizedKeywords: string[]) {
   const normalizedTokens = normalized.split(/[^a-z0-9]+/).filter(Boolean);
 
   return normalizedKeywords.some((keyword) => {
-    if (keyword.includes(" ")) {
-      return new RegExp(`\\b${escapeRegExp(keyword)}\\b`).test(normalized);
+    const normalizedKeyword = normalizeKeywordToken(keyword);
+    if (!normalizedKeyword) {
+      return false;
     }
 
-    return normalizedTokens.includes(keyword);
+    if (normalizedKeyword.includes(" ")) {
+      return new RegExp(`\\b${escapeRegExp(normalizedKeyword)}\\b`).test(normalized);
+    }
+
+    return normalizedTokens.includes(normalizedKeyword);
   });
 }
 
@@ -298,7 +307,6 @@ function classifyUnpricedLine(line: string): ClassifiedLine {
 }
 
 function classifyPricedLine(line: string): ClassifiedLine {
-  const taxPrefixed = hasTaxCodePrefix(line);
   const continuationAmount = extractContinuationAmount(line);
   if (continuationAmount !== null) {
     return { kind: "continuation", amountCents: continuationAmount };
@@ -329,14 +337,6 @@ function classifyPricedLine(line: string): ClassifiedLine {
       kind: "modifier",
       name,
       amountCents: -Math.abs(amountCents)
-    };
-  }
-
-  if (taxPrefixed) {
-    return {
-      kind: "item",
-      name,
-      amountCents
     };
   }
 
