@@ -13,6 +13,7 @@ import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import RemoveCircleOutlineRoundedIcon from "@mui/icons-material/RemoveCircleOutlineRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
+import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import {
   closestCenter,
   DndContext,
@@ -56,7 +57,15 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
-import { startTransition, useDeferredValue, useEffect, useState, type ReactNode } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode
+} from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import {
   computeItemPreview,
@@ -79,6 +88,7 @@ import {
   validateStepThree,
   validateStepTwo
 } from "./domain/splitter";
+import type { ReceiptImportItem } from "./receipt-import/types";
 import { clearStoredDraft, loadStoredDraft, storeDraft } from "./storage";
 
 const STEP_LABELS = [
@@ -180,6 +190,13 @@ function App() {
   const [pdfNoticeOpen, setPdfNoticeOpen] = useState(false);
   const [pdfErrorNoticeOpen, setPdfErrorNoticeOpen] = useState(false);
   const [exportPdfPending, setExportPdfPending] = useState(false);
+  const [receiptImportStatus, setReceiptImportStatus] = useState<
+    | { state: "idle" }
+    | { state: "processing"; fileName: string }
+    | { state: "success"; fileName: string; importedCount: number; warnings: string[] }
+    | { state: "error"; message: string }
+  >({ state: "idle" });
+  const receiptInputRef = useRef<HTMLInputElement | null>(null);
 
   const {
     control,
@@ -353,12 +370,38 @@ function App() {
     });
   }
 
+  function resetItems() {
+    const currentValues = getValues();
+
+    reset({
+      ...currentValues,
+      items: []
+    });
+    clearErrors("items");
+    setReceiptImportStatus({ state: "idle" });
+  }
+
   function reorderItems(oldIndex: number, newIndex: number) {
     if (oldIndex === newIndex || newIndex < 0 || newIndex >= items.length) {
       return;
     }
 
     itemsArray.move(oldIndex, newIndex);
+  }
+
+  function appendImportedItems(importedItems: ReceiptImportItem[]) {
+    const currentValues = getValues();
+    const preservedItems = currentValues.items.filter((item) => item.name.trim() || item.price.trim());
+    const mappedItems = importedItems.map((item) => ({
+      ...createEmptyItem(currentValues.participants),
+      name: item.name,
+      price: item.price
+    }));
+
+    reset({
+      ...currentValues,
+      items: [...preservedItems, ...mappedItems]
+    });
   }
 
   function handleItemSubmitFromEnter(index: number) {
@@ -534,6 +577,7 @@ function App() {
     setActiveStep(0);
     setHasUnlockedFullNavigation(false);
     setHasStarted(false);
+    setReceiptImportStatus({ state: "idle" });
     setShowRestoreDialog(false);
   }
 
@@ -543,6 +587,7 @@ function App() {
     setActiveStep(0);
     setHasUnlockedFullNavigation(false);
     setHasStarted(false);
+    setReceiptImportStatus({ state: "idle" });
   }
 
   async function copySummary() {
@@ -585,6 +630,34 @@ function App() {
       setPdfErrorNoticeOpen(true);
     } finally {
       setExportPdfPending(false);
+    }
+  }
+
+  async function handleReceiptFileSelection(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setReceiptImportStatus({ state: "processing", fileName: file.name });
+
+    try {
+      const { importReceipt } = await import("./receipt-import/importReceipt");
+      const result = await importReceipt(file);
+      appendImportedItems(result.items);
+      setReceiptImportStatus({
+        state: "success",
+        fileName: result.fileName,
+        importedCount: result.items.length,
+        warnings: result.warnings.map((warning) => warning.message)
+      });
+    } catch (error) {
+      setReceiptImportStatus({
+        state: "error",
+        message: error instanceof Error ? error.message : "Receipt import failed. Try another file."
+      });
     }
   }
 
@@ -887,14 +960,72 @@ function App() {
 
                 {activeStep === 1 && (
                   <Stack spacing={3}>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddRoundedIcon />}
-                      onClick={addItem}
-                      sx={{ alignSelf: "flex-start" }}
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1.25}
+                      alignItems={{ sm: "center" }}
+                      justifyContent="space-between"
                     >
-                      Add item
-                    </Button>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                        <Button
+                          variant="contained"
+                          startIcon={<AddRoundedIcon />}
+                          onClick={addItem}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Add item
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<UploadFileRoundedIcon />}
+                          onClick={() => receiptInputRef.current?.click()}
+                          disabled={receiptImportStatus.state === "processing"}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
+                        </Button>
+                      </Stack>
+                      <Button
+                        variant="text"
+                        color="inherit"
+                        startIcon={<RestartAltRoundedIcon />}
+                        onClick={resetItems}
+                        disabled={items.length === 0 || receiptImportStatus.state === "processing"}
+                        sx={{ alignSelf: { xs: "flex-start", sm: "flex-end" } }}
+                      >
+                        Reset items
+                      </Button>
+                      <input
+                        ref={receiptInputRef}
+                        aria-label="Import receipt file"
+                        accept="image/*,.pdf,application/pdf"
+                        type="file"
+                        hidden
+                        onChange={handleReceiptFileSelection}
+                      />
+                    </Stack>
+
+                    {receiptImportStatus.state === "processing" && (
+                      <Alert severity="info">Reading {receiptImportStatus.fileName} and extracting receipt lines.</Alert>
+                    )}
+
+                    {receiptImportStatus.state === "success" && (
+                      <Alert severity="success">
+                        Imported {receiptImportStatus.importedCount} items from {receiptImportStatus.fileName}. Review
+                        and edit anything that needs cleanup.
+                      </Alert>
+                    )}
+
+                    {receiptImportStatus.state === "error" && (
+                      <Alert severity="error">{receiptImportStatus.message}</Alert>
+                    )}
+
+                    {receiptImportStatus.state === "success" &&
+                      receiptImportStatus.warnings.map((warning, index) => (
+                        <Alert severity="warning" key={`${index}-${warning}`}>
+                          {warning}
+                        </Alert>
+                      ))}
 
                     {errors.items?.message && <Alert severity="error">{errors.items.message}</Alert>}
 
@@ -920,28 +1051,6 @@ function App() {
                                 disableMoveDown={index === items.length - 1}
                               >
                                 <Stack spacing={1.75}>
-                                  {(item.name.trim() || item.price.trim()) && (
-                                    <Stack
-                                      direction={{ xs: "column", sm: "row" }}
-                                      spacing={{ xs: 0.35, sm: 1 }}
-                                      alignItems={{ sm: "center" }}
-                                    >
-                                      <Typography variant="h6" fontWeight={800}>
-                                        {item.name.trim() || `Item ${index + 1}`}
-                                      </Typography>
-                                      {item.price.trim() && (
-                                        <Typography
-                                          variant="h6"
-                                          fontWeight={800}
-                                          color="primary.main"
-                                          sx={{ letterSpacing: "-0.02em" }}
-                                        >
-                                          {formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)}
-                                        </Typography>
-                                      )}
-                                    </Stack>
-                                  )}
-
                                   <Grid container spacing={2}>
                                   <Grid size={{ xs: 12, md: 7 }}>
                                     <TextField
@@ -956,6 +1065,20 @@ function App() {
                                           event.preventDefault();
                                           handleItemSubmitFromEnter(index);
                                         }
+                                      }}
+                                      sx={{
+                                        "& .MuiInputAdornment-root": {
+                                          color: "text.secondary",
+                                          fontWeight: 700
+                                        },
+                                        "& .MuiInputBase-input": {
+                                          fontWeight: 700
+                                        }
+                                      }}
+                                      InputProps={{
+                                        startAdornment: (
+                                          <InputAdornment position="start">#{index + 1}</InputAdornment>
+                                        )
                                       }}
                                     />
                                   </Grid>
@@ -976,6 +1099,11 @@ function App() {
                                         if (event.key === "Enter") {
                                           event.preventDefault();
                                           handleItemSubmitFromEnter(index);
+                                        }
+                                      }}
+                                      sx={{
+                                        "& .MuiInputBase-input": {
+                                          fontWeight: 700
                                         }
                                       }}
                                     />
@@ -1290,9 +1418,6 @@ function App() {
                     >
                       <Box>
                         <Typography variant="h2">Final balances</Typography>
-                        <Typography color="text.secondary">
-                          Total receipt: {formatMoney(settlement.data.totalCents, settlement.data.currency)}
-                        </Typography>
                       </Box>
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                         <Button
@@ -1336,24 +1461,18 @@ function App() {
                                     justifyContent="space-between"
                                     alignItems={{ md: "center" }}
                                   >
-                                    <Box>
-                                      <Typography variant="overline" color="text.secondary">
-                                        Payer
-                                      </Typography>
-                                      <Typography variant="h4">
-                                        {payer.name}
-                                      </Typography>
-                                      <Typography color="text.secondary">
-                                        This is the person who paid the full receipt and should be reimbursed.
-                                      </Typography>
-                                    </Box>
-                                    <Chip
-                                      label={`Collect ${formatMoney(payer.netCents, settlement.data.currency)}`}
-                                      color="primary"
-                                      variant="outlined"
-                                      sx={{ fontWeight: 800 }}
-                                    />
-                                  </Stack>
+                                      <Box>
+                                        <Typography variant="overline" color="text.secondary">
+                                          Payer
+                                        </Typography>
+                                        <Typography variant="h4">
+                                          {payer.name}
+                                        </Typography>
+                                        <Typography color="text.secondary">
+                                          This is the person who paid the full receipt and should be reimbursed.
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
 
                                   <Grid container spacing={1.5}>
                                     {[
@@ -1366,22 +1485,25 @@ function App() {
                                         label: "Gets back",
                                         value: formatMoney(payer.netCents, settlement.data.currency)
                                       }
-                                    ].map((metric) => (
-                                      <Grid size={{ xs: 12, md: 4 }} key={metric.label}>
-                                        <Box
-                                          sx={{
-                                            p: 1.75,
+                                      ].map((metric) => (
+                                        <Grid size={{ xs: 12, md: 4 }} key={metric.label}>
+                                          <Box
+                                            sx={{
+                                              p: 1.75,
                                             borderRadius: "20px",
                                             bgcolor: alpha("#1D1D1F", 0.03)
                                           }}
-                                        >
-                                          <Typography color="text.secondary">{metric.label}</Typography>
-                                          <Typography variant="h5">
-                                            {metric.value}
-                                          </Typography>
-                                        </Box>
-                                      </Grid>
-                                    ))}
+                                          >
+                                            <Typography color="text.secondary">{metric.label}</Typography>
+                                            <Typography
+                                              variant="h5"
+                                              color={metric.label === "Gets back" ? "primary.main" : undefined}
+                                            >
+                                              {metric.value}
+                                            </Typography>
+                                          </Box>
+                                        </Grid>
+                                      ))}
                                   </Grid>
                                 </Stack>
                               </CardContent>

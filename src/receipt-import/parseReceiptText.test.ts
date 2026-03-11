@@ -1,0 +1,186 @@
+import { describe, expect, it } from "vitest";
+import { parseReceiptText } from "./parseReceiptText";
+
+describe("parseReceiptText", () => {
+  it("extracts standard item lines with trailing prices", () => {
+    const result = parseReceiptText(`
+      BANANAS 1.99
+      TOMATOES 2.49
+    `);
+
+    expect(result.items).toEqual([
+      { name: "BANANAS", price: "1.99" },
+      { name: "TOMATOES", price: "2.49" }
+    ]);
+  });
+
+  it("turns discount lines into negative rows", () => {
+    const result = parseReceiptText(`
+      Pasta 3.50
+      Promo discount 0.75
+    `);
+
+    expect(result.items).toEqual([
+      { name: "Pasta", price: "3.50" },
+      { name: "Promo discount", price: "-0.75" }
+    ]);
+  });
+
+  it("ignores total and payment lines", () => {
+    const result = parseReceiptText(`
+      Apples 2.00
+      Subtotal 2.00
+      Total 2.00
+      Paid cash 2.00
+    `);
+
+    expect(result.items).toEqual([{ name: "Apples", price: "2.00" }]);
+    expect(result.warnings.some((warning) => warning.code === "ignored-summary-lines")).toBe(true);
+  });
+
+  it("supports mixed decimal separators and thousands cleanup", () => {
+    const result = parseReceiptText(`
+      Olive Oil 1.234,56
+      Cheese 12,30
+    `);
+
+    expect(result.items).toEqual([
+      { name: "Olive Oil", price: "1234.56" },
+      { name: "Cheese", price: "12.30" }
+    ]);
+  });
+
+  it("warns when no probable items are found", () => {
+    const result = parseReceiptText(`
+      TOTAL 8.99
+      VISA 8.99
+    `);
+
+    expect(result.items).toEqual([]);
+    expect(result.warnings.some((warning) => warning.code === "no-items-detected")).toBe(true);
+  });
+
+  it("warns on empty input", () => {
+    const result = parseReceiptText("   \n   ");
+
+    expect(result.items).toEqual([]);
+    expect(result.warnings).toContainEqual({
+      code: "no-items-detected",
+      message: "No probable receipt items were detected. Try a clearer photo or edit items manually."
+    });
+  });
+
+  it("merges wrapped supermarket item descriptions with quantity continuation lines", () => {
+    const result = parseReceiptText(`
+      Mercearia Doce:
+      (C) BOL GULLON AVELA 220G
+      2 X 1,49 2,98
+      (C) NUGGETS FRANGO CAPITAO IGLO 50U 12,99
+    `);
+
+    expect(result.items).toEqual([
+      { name: "BOL GULLON AVELA 220G", price: "2.98" },
+      { name: "NUGGETS FRANGO CAPITAO IGLO 50U", price: "12.99" }
+    ]);
+  });
+
+  it("uses quantity times unit price when the wrapped line has no explicit total", () => {
+    const result = parseReceiptText(`
+      (A) MASSA ESPIRAIS MILANEZA 500G
+      2 X 1,04
+    `);
+
+    expect(result.items).toEqual([{ name: "MASSA ESPIRAIS MILANEZA 500G", price: "2.08" }]);
+  });
+
+  it("ignores supermarket headers and note lines without treating them as items", () => {
+    const result = parseReceiptText(`
+      Padaria:
+      Aprox. fim prazo validade
+      Pao de forma 2,19
+    `);
+
+    expect(result.items).toEqual([{ name: "Pao de forma", price: "2.19" }]);
+  });
+
+  it("ignores punctuated footer note keywords such as www and tel", () => {
+    const result = parseReceiptText(`
+      www.continente.pt
+      tel. 21 123 4567
+      Pao de forma 2,19
+    `);
+
+    expect(result.items).toEqual([{ name: "Pao de forma", price: "2.19" }]);
+  });
+
+  it("ignores savings-only lines such as poupanca metadata", () => {
+    const result = parseReceiptText(`
+      Iogurte 3,49
+      POUPANCA 1,20
+    `);
+
+    expect(result.items).toEqual([{ name: "Iogurte", price: "3.49" }]);
+  });
+
+  it("supports multiple discount keywords while keeping valid items", () => {
+    const result = parseReceiptText(`
+      Iogurte 3,49
+      DESCONTO 1,20
+      OFERTA 0,50
+      TOTAL A PAGAR 1,79
+    `);
+
+    expect(result.items).toEqual([
+      { name: "Iogurte", price: "3.49" },
+      { name: "DESCONTO", price: "-1.20" },
+      { name: "OFERTA", price: "-0.50" }
+    ]);
+  });
+
+  it("ignores vat distribution footer rows", () => {
+    const result = parseReceiptText(`
+      (C) BOL GULLON AVELA 220G 1,49
+      6,00% 30 431,83
+      13,00% 1530,20
+      23,00% 155 335 719,10
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL GULLON AVELA 220G", price: "1.49" }]);
+  });
+
+  it("ignores portuguese summary and payment footer blocks", () => {
+    const result = parseReceiptText(`
+      BOL DIGESTIVE AVEIA CHOCO CNT 1,79
+      SUBTOTAL 64,31
+      TOTAL A PAGAR 53,09
+      Continente Pay (**** 3879) 53,09
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);
+    expect(result.warnings).toContainEqual({
+      code: "ignored-summary-lines",
+      message: "Ignored 3 total or payment lines."
+    });
+  });
+
+  it("extracts valid items from mixed receipt noise without absorbing merchant headers", () => {
+    const result = parseReceiptText(`
+      CONTINENTE MONTIJO
+      Fatura Simplificada Original
+      (C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79
+      Aprox. fim prazo validade
+      Continente Pay (**** 3879) 53,09
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);
+  });
+
+  it("does not treat tax-prefixed all-caps merchant headers as item descriptions", () => {
+    const result = parseReceiptText(`
+      (C) CONTINENTE BOM DIA
+      (C) BOL DIGESTIVE AVEIA CHOCO CNT 1,79
+    `);
+
+    expect(result.items).toEqual([{ name: "BOL DIGESTIVE AVEIA CHOCO CNT", price: "1.79" }]);
+  });
+});

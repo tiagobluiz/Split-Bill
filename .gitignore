@@ -9,6 +9,8 @@ Thumbs.db
 
 dist/
 build/
+playwright-results/
+playwright-results-receipt-import/
 playwright-report/
 test-results/
 *.tsbuildinfo
