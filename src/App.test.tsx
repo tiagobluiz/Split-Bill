@@ -188,6 +188,17 @@ describe("App", () => {
     renderApp();
 
     await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    const step2Button = getStepButton("Go to step 2: Items & prices", false);
+    await user.click(step2Button);
+    expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Go to step 2: Items & prices" })).not.toHaveAttribute(
+      "aria-current",
+      "step"
+    );
+
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+
     const disabledStep3 = getStepButton("Go to step 3: Consumption grid", true);
     await user.click(disabledStep3);
     expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
@@ -196,12 +207,18 @@ describe("App", () => {
     await user.click(getStepButton("Go to step 2: Items & prices", false));
     expect(await screen.findAllByRole("button", { name: "Add item" })).not.toHaveLength(0);
     expect(getStepButton("Go to step 2: Items & prices", false)).toHaveAttribute("aria-current", "step");
+    await user.click(getStepButton("Go to step 4: Results", true));
+    expect(getStepButton("Go to step 2: Items & prices", false)).toHaveAttribute("aria-current", "step");
+
+    await user.click(getAddItemButton());
+    await user.type(screen.getByLabelText("Item name"), "Milk");
+    await user.type(screen.getByLabelText("Price"), "5.00");
 
     await user.click(getStepButton("Go to step 1: People & payer", false));
     expect(getStepButton("Go to step 1: People & payer", false)).toHaveAttribute("aria-current", "step");
 
     await user.click(getStepButton("Go to step 4: Results", false));
-    expect(getStepButton("Go to step 4: Results", false)).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("button", { name: "Go to step 4: Results" })).toHaveAttribute("aria-current", "step");
   });
 
   it("opens on the landing hero and only shows the splitter after start", async () => {
