@@ -114,6 +114,16 @@ const CURRENCY_OPTIONS = [
   { code: "CHF", label: "Swiss Franc (CHF)" }
 ] as const;
 
+const STEP_SUMMARIES = [
+  "Who is in the split and who paid.",
+  "Build the receipt manually or import it.",
+  "Adjust exactly who consumed each line.",
+  "Review the final reimbursement amounts."
+] as const;
+
+const SURFACE_RADIUS = 18;
+const INNER_RADIUS = 14;
+
 function SortableCard(props: {
   id: string;
   children: ReactNode;
@@ -132,7 +142,10 @@ function SortableCard(props: {
       sx={{
         transform: CSS.Transform.toString(transform),
         transition,
-        overflow: "visible"
+        overflow: "visible",
+        borderRadius: `${SURFACE_RADIUS}px`,
+        borderColor: alpha("#1D1D1F", 0.08),
+        boxShadow: "0 14px 34px rgba(31, 23, 15, 0.05)"
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
@@ -145,6 +158,7 @@ function SortableCard(props: {
               size="small"
               sx={{
                 bgcolor: alpha("#EF5B3C", 0.08),
+                color: "text.secondary",
                 "&:hover": { bgcolor: alpha("#EF5B3C", 0.14) }
               }}
             >
@@ -182,6 +196,18 @@ function SortableCard(props: {
       </CardContent>
     </Card>
   );
+}
+
+function getCurrencyNarrowSymbol(currency: string, locale = navigator.language) {
+  const currencyPart = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol"
+  })
+    .formatToParts(0)
+    .find((part) => part.type === "currency")?.value;
+
+  return currencyPart ?? currency;
 }
 
 function App() {
@@ -808,13 +834,10 @@ function App() {
           }}
         >
           <Box sx={{ maxWidth: 1240, mx: "auto", width: "100%", px: { xs: 2, md: 4 }, py: { xs: 4, md: 6 } }}>
-            <Grid container spacing={4} alignItems="center">
-              <Grid size={{ xs: 12, md: 7 }}>
-                <Stack spacing={2.5}>
+            <Grid container justifyContent="center">
+              <Grid size={{ xs: 12, md: 10, lg: 8 }}>
+                <Stack spacing={3} alignItems={{ xs: "flex-start", md: "center" }} textAlign={{ md: "center" }}>
                   <Typography variant="h1">Split grocery bills without the spreadsheet drama.</Typography>
-                  <Typography sx={{ maxWidth: 640, fontSize: { xs: "1rem", md: "1.15rem" }, opacity: 0.9 }}>
-                    Add the people, mark who paid, drop in each product, and fine-tune who consumed what.
-                  </Typography>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
                     <Button
                       variant="contained"
@@ -832,43 +855,6 @@ function App() {
                   </Stack>
                 </Stack>
               </Grid>
-              <Grid size={{ xs: 12, md: 5 }}>
-                <Card
-                  sx={{
-                    bgcolor: alpha("#0F172A", 0.2),
-                    borderColor: alpha("#FFFFFF", 0.2)
-                  }}
-                >
-                  <CardContent>
-                    <Stack spacing={2}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h3" sx={{ color: "white" }}>
-                          Quick flow
-                        </Typography>
-                        <PaidRoundedIcon />
-                      </Stack>
-                      {[
-                        "1. Add at least two people and choose the payer.",
-                        "2. Add every product line and reorder freely.",
-                        "3. Adjust who consumed each item.",
-                        "4. Copy the reimbursement summary."
-                      ].map((line) => (
-                        <Alert
-                          key={line}
-                          icon={false}
-                          sx={{
-                            bgcolor: alpha("#FFFFFF", 0.12),
-                            color: "white",
-                            "& .MuiAlert-message": { width: "100%" }
-                          }}
-                        >
-                          {line}
-                        </Alert>
-                      ))}
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
             </Grid>
           </Box>
         </Box>
@@ -883,7 +869,7 @@ function App() {
                   <Box>
                     <Typography variant="h2">Receipt splitter</Typography>
                     <Typography color="text.secondary">
-                      Fast setup, item-level control, and one clean settlement at the end.
+                      {STEP_SUMMARIES[activeStep]}
                     </Typography>
                   </Box>
                 </Stack>
@@ -914,7 +900,8 @@ function App() {
                           }}
                           sx={{
                             p: 2,
-                            borderRadius: "20px",
+                            minHeight: 92,
+                            borderRadius: `${SURFACE_RADIUS}px`,
                             border: "1px solid",
                             borderColor: current
                               ? "primary.main"
@@ -925,14 +912,18 @@ function App() {
                               ? alpha("#EF5B3C", 0.08)
                               : completed
                                 ? alpha("#0F766E", 0.08)
-                                : "transparent",
+                                : alpha("#FFFFFF", 0.72),
                             cursor: canNavigateToStep(index) ? "pointer" : "not-allowed",
                             opacity: canNavigateToStep(index) ? 1 : 0.55,
-                            transition: "border-color 120ms ease, background-color 120ms ease, opacity 120ms ease",
+                            display: "grid",
+                            alignContent: "space-between",
+                            transition:
+                              "border-color 120ms ease, background-color 120ms ease, opacity 120ms ease, transform 120ms ease",
                             "&:hover": canNavigateToStep(index)
                               ? {
                                   borderColor: current ? "primary.main" : alpha("#EF5B3C", 0.28),
-                                  bgcolor: current ? alpha("#EF5B3C", 0.1) : alpha("#EF5B3C", 0.04)
+                                  bgcolor: current ? alpha("#EF5B3C", 0.1) : alpha("#EF5B3C", 0.04),
+                                  transform: "translateY(-1px)"
                                 }
                               : undefined,
                             "&:focus-visible": {
@@ -967,47 +958,73 @@ function App() {
 
                 {activeStep === 0 && (
                   <Stack spacing={3}>
-                    <Stack
-                      direction={{ xs: "column", md: "row" }}
-                      spacing={1.5}
-                      alignItems={{ md: "center" }}
-                    >
-                      <TextField
-                        label="Add participant"
-                        placeholder="Ana"
-                        value={participantInput}
-                        onChange={(event) => setParticipantInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addParticipant();
-                          }
-                        }}
-                        fullWidth
-                      />
-                      <Button
-                        variant="contained"
-                        startIcon={<AddRoundedIcon />}
-                        onClick={addParticipant}
-                      >
-                        Add
-                      </Button>
-                    </Stack>
-
-                    <TextField
-                      select
-                      label="Currency"
-                      size="small"
-                      value={currency}
-                      onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
-                      sx={{ width: { xs: "100%", md: 220 } }}
-                    >
-                      {CURRENCY_OPTIONS.map((option) => (
-                        <MenuItem key={option.code} value={option.code}>
-                          {option.label}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, lg: 8 }}>
+                        <Card
+                          variant="outlined"
+                          sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08) }}
+                        >
+                          <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
+                            <Stack spacing={1.5}>
+                              <Typography variant="subtitle1">Add people</Typography>
+                              <Stack
+                                direction={{ xs: "column", md: "row" }}
+                                spacing={1.25}
+                                alignItems={{ md: "center" }}
+                              >
+                                <TextField
+                                  label="Add participant"
+                                  placeholder="Ana"
+                                  value={participantInput}
+                                  onChange={(event) => setParticipantInput(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Enter") {
+                                      event.preventDefault();
+                                      addParticipant();
+                                    }
+                                  }}
+                                  fullWidth
+                                />
+                                <Button
+                                  variant="contained"
+                                  startIcon={<AddRoundedIcon />}
+                                  onClick={addParticipant}
+                                  sx={{ minWidth: { md: 132 } }}
+                                >
+                                  Add person
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid size={{ xs: 12, lg: 4 }}>
+                        <Card
+                          variant="outlined"
+                          sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08) }}
+                        >
+                          <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
+                            <Stack spacing={1.5}>
+                              <Typography variant="subtitle1">Receipt currency</Typography>
+                              <TextField
+                                select
+                                label="Currency"
+                                size="small"
+                                value={currency}
+                                onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
+                                fullWidth
+                              >
+                                {CURRENCY_OPTIONS.map((option) => (
+                                  <MenuItem key={option.code} value={option.code}>
+                                    {option.label}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    </Grid>
 
                     {errors.participants?.message && (
                       <Alert severity="error">{errors.participants.message}</Alert>
@@ -1021,35 +1038,25 @@ function App() {
                           <Grid size={{ xs: 12, md: 6 }} key={participant.id}>
                             <Card
                               sx={{
+                                borderRadius: `${SURFACE_RADIUS}px`,
                                 borderColor:
                                   payerParticipantId === participant.id
                                     ? "primary.main"
                                     : alpha("#1D1D1F", 0.08),
                                 borderStyle: "solid",
-                                borderWidth: 1
+                                borderWidth: 1,
+                                bgcolor: payerParticipantId === participant.id ? alpha("#EF5B3C", 0.04) : "background.paper"
                               }}
                             >
-                              <CardContent>
-                                <Stack spacing={2}>
+                              <CardContent sx={{ p: { xs: 2, md: 2.25 } }}>
+                                <Stack spacing={1.5}>
                                   <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                    <Stack direction="row" spacing={1} alignItems="center">
-                                      <Chip
-                                        icon={<PersonRoundedIcon />}
-                                        label={`Participant ${index + 1}`}
-                                        variant="outlined"
-                                      />
-                                      {payerParticipantId === participant.id && (
-                                        <Chip
-                                          color="primary"
-                                          icon={<PaidRoundedIcon />}
-                                          label="Payer"
-                                        />
-                                      )}
-                                    </Stack>
+                                    <Chip icon={<PersonRoundedIcon />} label={`Person ${index + 1}`} variant="outlined" />
                                     <IconButton
                                       aria-label={`Remove ${participant.name || `participant ${index + 1}`}`}
                                       onClick={() => removeParticipant(index)}
                                       type="button"
+                                      size="small"
                                     >
                                       <DeleteOutlineRoundedIcon />
                                     </IconButton>
@@ -1061,13 +1068,24 @@ function App() {
                                     error={Boolean(participantError)}
                                     helperText={participantError}
                                   />
-                                  <Button
-                                    variant={payerParticipantId === participant.id ? "contained" : "outlined"}
-                                    onClick={() => setValue("payerParticipantId", participant.id)}
-                                    startIcon={<PaidRoundedIcon />}
+                                  <Stack
+                                    direction={{ xs: "column", sm: "row" }}
+                                    spacing={1}
+                                    justifyContent="space-between"
+                                    alignItems={{ sm: "center" }}
                                   >
-                                    {payerParticipantId === participant.id ? "Marked as payer" : "Mark as payer"}
-                                  </Button>
+                                    <Typography color="text.secondary">
+                                      {payerParticipantId === participant.id ? "This person paid the receipt." : "Participant in the split."}
+                                    </Typography>
+                                    <Button
+                                      variant={payerParticipantId === participant.id ? "contained" : "outlined"}
+                                      color={payerParticipantId === participant.id ? "primary" : "inherit"}
+                                      onClick={() => setValue("payerParticipantId", participant.id)}
+                                      startIcon={<PaidRoundedIcon />}
+                                    >
+                                      {payerParticipantId === participant.id ? "Payer" : "Set as payer"}
+                                    </Button>
+                                  </Stack>
                                 </Stack>
                               </CardContent>
                             </Card>
@@ -1085,45 +1103,66 @@ function App() {
                 {activeStep === 1 && (
                   <Stack spacing={3}>
                     <Stack
-                      direction={{ xs: "column", sm: "row" }}
-                      spacing={1.25}
-                      alignItems={{ sm: "center" }}
+                      direction={{ xs: "column", lg: "row" }}
+                      spacing={2}
                       justifyContent="space-between"
+                      alignItems={{ lg: "flex-start" }}
                     >
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                        <Button
-                          variant="contained"
-                          startIcon={<AddRoundedIcon />}
-                          onClick={addItem}
-                          sx={{ alignSelf: "flex-start" }}
-                        >
-                          Add item
-                        </Button>
-                        <Button
+                      <Stack spacing={1.5} sx={{ flex: 1 }}>
+                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ sm: "center" }}>
+                          <Button
+                            variant="contained"
+                            startIcon={<AddRoundedIcon />}
+                            onClick={addItem}
+                            sx={{ alignSelf: "flex-start" }}
+                          >
+                            Add item
+                          </Button>
+                          <Typography color="text.secondary">
+                            Manual entry stays primary. Use imports only when they speed up the receipt.
+                          </Typography>
+                        </Stack>
+                        <Card
                           variant="outlined"
-                          startIcon={<UploadFileRoundedIcon />}
-                          onClick={() => receiptInputRef.current?.click()}
-                          disabled={receiptImportStatus.state === "processing"}
-                          sx={{ alignSelf: "flex-start" }}
+                          sx={{
+                            borderRadius: `${SURFACE_RADIUS}px`,
+                            borderColor: alpha("#1D1D1F", 0.08),
+                            bgcolor: alpha("#FFFFFF", 0.76)
+                          }}
                         >
-                          {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          startIcon={<PsychologyAltRoundedIcon />}
-                          onClick={() => setAiDialogOpen(true)}
-                          sx={{ alignSelf: "flex-start" }}
-                        >
-                          Ask AI
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          startIcon={<ContentPasteRoundedIcon />}
-                          onClick={() => setPasteDialogOpen(true)}
-                          sx={{ alignSelf: "flex-start" }}
-                        >
-                          Paste list
-                        </Button>
+                          <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
+                            <Stack spacing={1.25}>
+                              <Typography variant="subtitle1">Import tools</Typography>
+                              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} flexWrap="wrap" useFlexGap>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<UploadFileRoundedIcon />}
+                                  onClick={() => receiptInputRef.current?.click()}
+                                  disabled={receiptImportStatus.state === "processing"}
+                                  sx={{ alignSelf: "flex-start" }}
+                                >
+                                  {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<PsychologyAltRoundedIcon />}
+                                  onClick={() => setAiDialogOpen(true)}
+                                  sx={{ alignSelf: "flex-start" }}
+                                >
+                                  Ask AI
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  startIcon={<ContentPasteRoundedIcon />}
+                                  onClick={() => setPasteDialogOpen(true)}
+                                  sx={{ alignSelf: "flex-start" }}
+                                >
+                                  Paste list
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </CardContent>
+                        </Card>
                       </Stack>
                       <Button
                         variant="text"
@@ -1131,7 +1170,7 @@ function App() {
                         startIcon={<RestartAltRoundedIcon />}
                         onClick={resetItems}
                         disabled={items.length === 0 || receiptImportStatus.state === "processing"}
-                        sx={{ alignSelf: { xs: "flex-start", sm: "flex-end" } }}
+                        sx={{ alignSelf: { xs: "flex-start", lg: "center" } }}
                       >
                         Reset items
                       </Button>
@@ -1190,7 +1229,24 @@ function App() {
                                 disableMoveUp={index === 0}
                                 disableMoveDown={index === items.length - 1}
                               >
-                                <Stack spacing={1.75}>
+                                <Stack spacing={1.5}>
+                                  <Stack
+                                    direction={{ xs: "column", sm: "row" }}
+                                    spacing={1}
+                                    justifyContent="space-between"
+                                    alignItems={{ sm: "center" }}
+                                  >
+                                    <Typography variant="subtitle1">Receipt line {index + 1}</Typography>
+                                    <Typography
+                                      variant="subtitle1"
+                                      color={item.price ? "primary.main" : "text.secondary"}
+                                      sx={{ fontWeight: 800 }}
+                                    >
+                                      {item.price
+                                        ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
+                                        : "No price yet"}
+                                    </Typography>
+                                  </Stack>
                                   <Grid container spacing={2}>
                                   <Grid size={{ xs: 12, md: 7 }}>
                                     <TextField
@@ -1212,7 +1268,8 @@ function App() {
                                           fontWeight: 700
                                         },
                                         "& .MuiInputBase-input": {
-                                          fontWeight: 700
+                                          fontWeight: 700,
+                                          fontSize: "1rem"
                                         }
                                       }}
                                       InputProps={{
@@ -1232,7 +1289,7 @@ function App() {
                                       helperText={itemPriceError}
                                       InputProps={{
                                         startAdornment: (
-                                          <InputAdornment position="start">{currency}</InputAdornment>
+                                          <InputAdornment position="start">{getCurrencyNarrowSymbol(currency)}</InputAdornment>
                                         )
                                       }}
                                       onKeyDown={(event) => {
@@ -1243,7 +1300,8 @@ function App() {
                                       }}
                                       sx={{
                                         "& .MuiInputBase-input": {
-                                          fontWeight: 700
+                                          fontWeight: 800,
+                                          fontSize: "1rem"
                                         }
                                       }}
                                     />
@@ -1270,10 +1328,17 @@ function App() {
                 )}
 
                 {activeStep === 2 && (
-                  <Stack spacing={2}>
-                    <Typography variant="body2" color="text.secondary">
-                      Item previews are provisional. Final leftover cents are balanced in the results step.
-                    </Typography>
+                  <Stack spacing={2.25}>
+                    <Card
+                      variant="outlined"
+                      sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08), bgcolor: alpha("#FFFFFF", 0.76) }}
+                    >
+                      <CardContent sx={{ py: 1.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Item previews are provisional. Final leftover cents are balanced in the results step.
+                        </Typography>
+                      </CardContent>
+                    </Card>
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
@@ -1306,15 +1371,15 @@ function App() {
                                 disableMoveUp={itemIndex === 0}
                                 disableMoveDown={itemIndex === items.length - 1}
                               >
-                                <Stack spacing={1.75}>
+                                <Stack spacing={2}>
                                   <Stack
                                     direction={{ xs: "column", md: "row" }}
-                                    spacing={1}
+                                    spacing={1.5}
                                     justifyContent="space-between"
                                     alignItems={{ md: "center" }}
                                   >
-                                    <Box>
-                                      <Typography variant="h6" fontWeight={800}>
+                                    <Box sx={{ minWidth: 0 }}>
+                                      <Typography variant="h4" fontWeight={800}>
                                         {item.name || `Item ${itemIndex + 1}`}
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary">
@@ -1328,26 +1393,24 @@ function App() {
                                       spacing={1}
                                       alignItems={{ sm: "center" }}
                                     >
-                                      {item.splitMode === "shares" && (
-                                        <Button
-                                          size="small"
-                                          variant="text"
-                                          startIcon={<RestartAltRoundedIcon />}
-                                          onClick={() => resetShareValues(itemIndex)}
-                                        >
-                                          Reset row
-                                        </Button>
-                                      )}
-                                      {item.splitMode === "percent" && (
-                                        <Button
-                                          size="small"
-                                          variant="text"
-                                          startIcon={<RestartAltRoundedIcon />}
-                                          onClick={() => resetPercentValues(itemIndex)}
-                                        >
-                                          Reset row
-                                        </Button>
-                                      )}
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        color="inherit"
+                                        startIcon={<RestartAltRoundedIcon />}
+                                        onClick={() => {
+                                          if (item.splitMode === "shares") {
+                                            resetShareValues(itemIndex);
+                                          }
+
+                                          if (item.splitMode === "percent") {
+                                            resetPercentValues(itemIndex);
+                                          }
+                                        }}
+                                        disabled={item.splitMode === "even"}
+                                      >
+                                        Reset row
+                                      </Button>
                                       <ToggleButtonGroup
                                         exclusive
                                         value={item.splitMode}
@@ -1361,8 +1424,8 @@ function App() {
                                         sx={{
                                           alignSelf: { xs: "stretch", md: "center" },
                                           "& .MuiToggleButton-root": {
-                                            minHeight: 32,
-                                            minWidth: 82,
+                                            minHeight: 40,
+                                            minWidth: 84,
                                             px: 1.5,
                                             textTransform: "none",
                                             fontWeight: 700
@@ -1392,16 +1455,18 @@ function App() {
                                               sx={{
                                                 height: "100%",
                                                 borderColor: alpha("#1D1D1F", 0.08),
-                                                borderRadius: "20px"
+                                                borderRadius: `${INNER_RADIUS}px`,
+                                                bgcolor: alpha("#FFFFFF", 0.84),
+                                                boxShadow: "none"
                                               }}
                                             >
                                               <CardContent
                                                 sx={{
-                                                  p: 1.8,
+                                                  p: 1.6,
                                                   height: "100%",
                                                   display: "grid",
-                                                  gridTemplateRows: "auto 32px 40px",
-                                                  rowGap: 1.25
+                                                  gridTemplateRows: "auto auto 48px",
+                                                  rowGap: 1
                                                 }}
                                               >
                                                 <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -1453,25 +1518,32 @@ function App() {
                                                       onClick={() => toggleEvenAllocation(itemIndex, allocationIndex)}
                                                       sx={{
                                                         width: "100%",
-                                                        height: "100%",
-                                                        justifyContent: "flex-start",
+                                                        minHeight: 48,
+                                                        justifyContent: "space-between",
                                                         gap: 1,
-                                                        borderRadius: 1.8,
+                                                        borderRadius: `${INNER_RADIUS}px`,
                                                         px: 1.25,
                                                         border: "1px solid",
-                                                        borderColor: allocation.evenIncluded ? "primary.main" : alpha("#1D1D1F", 0.18),
-                                                        bgcolor: allocation.evenIncluded ? "primary.main" : "transparent",
-                                                        color: allocation.evenIncluded ? "primary.contrastText" : "text.primary",
+                                                        borderColor: allocation.evenIncluded ? alpha("#EF5B3C", 0.5) : alpha("#1D1D1F", 0.16),
+                                                        bgcolor: allocation.evenIncluded ? alpha("#EF5B3C", 0.1) : alpha("#1D1D1F", 0.03),
+                                                        color: "text.primary",
                                                         fontSize: "0.9rem",
                                                         fontWeight: 700
                                                       }}
                                                     >
-                                                      {allocation.evenIncluded ? (
-                                                        <CheckCircleRoundedIcon fontSize="small" />
-                                                      ) : (
-                                                        <CloseRoundedIcon fontSize="small" />
-                                                      )}
-                                                      {allocation.evenIncluded ? "Included in split" : "Excluded from split"}
+                                                      <Stack direction="row" spacing={1} alignItems="center">
+                                                        {allocation.evenIncluded ? (
+                                                          <CheckCircleRoundedIcon fontSize="small" color="primary" />
+                                                        ) : (
+                                                          <CloseRoundedIcon fontSize="small" />
+                                                        )}
+                                                        <Typography fontWeight={700}>
+                                                          {allocation.evenIncluded ? "Included" : "Excluded"}
+                                                        </Typography>
+                                                      </Stack>
+                                                      <Typography variant="body2" color="text.secondary">
+                                                        {allocation.evenIncluded ? "Counts toward split" : "Ignored"}
+                                                      </Typography>
                                                     </ButtonBase>
                                                   )}
 
@@ -1497,7 +1569,7 @@ function App() {
                                                         }
                                                       }}
                                                       inputProps={{ min: 0, step: 1 }}
-                                                      sx={{ "& .MuiInputBase-root": { height: 40 } }}
+                                                      sx={{ "& .MuiInputBase-root": { height: 48 } }}
                                                     />
                                                   )}
 
@@ -1526,7 +1598,7 @@ function App() {
                                                       InputProps={{
                                                         endAdornment: <InputAdornment position="end">%</InputAdornment>
                                                       }}
-                                                      sx={{ "& .MuiInputBase-root": { height: 40 } }}
+                                                      sx={{ "& .MuiInputBase-root": { height: 48 } }}
                                                     />
                                                   )}
                                                 </Box>
@@ -1590,97 +1662,116 @@ function App() {
                       const payees = settlement.data.people.filter((person) => !person.isPayer);
 
                       return (
-                        <Stack spacing={1.5}>
+                        <Grid container spacing={2}>
                           {payer && (
-                            <Card variant="outlined" sx={{ borderRadius: "20px", borderColor: alpha("#EF5B3C", 0.24) }}>
-                              <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
-                                <Stack spacing={2}>
-                                  <Stack
-                                    direction={{ xs: "column", md: "row" }}
-                                    spacing={1.5}
-                                    justifyContent="space-between"
-                                    alignItems={{ md: "center" }}
-                                  >
-                                      <Box>
-                                        <Typography variant="overline" color="text.secondary">
-                                          Payer
-                                        </Typography>
-                                        <Typography variant="h4">
-                                          {payer.name}
-                                        </Typography>
-                                        <Typography color="text.secondary">
-                                          This is the person who paid the full receipt and should be reimbursed.
-                                        </Typography>
-                                      </Box>
-                                    </Stack>
-
-                                  <Grid container spacing={1.5}>
-                                    {[
-                                      { label: "Paid", value: formatMoney(payer.paidCents, settlement.data.currency) },
-                                      {
-                                        label: "Consumed",
-                                        value: formatMoney(payer.consumedCents, settlement.data.currency)
-                                      },
-                                      {
-                                        label: "Gets back",
-                                        value: formatMoney(payer.netCents, settlement.data.currency)
-                                      }
+                            <Grid size={{ xs: 12, lg: 5 }}>
+                              <Card
+                                variant="outlined"
+                                sx={{
+                                  height: "100%",
+                                  borderRadius: `${SURFACE_RADIUS}px`,
+                                  borderColor: alpha("#EF5B3C", 0.18),
+                                  bgcolor: alpha("#FFFFFF", 0.82)
+                                }}
+                              >
+                                <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+                                  <Stack spacing={2}>
+                                    <Box>
+                                      <Typography variant="overline" color="text.secondary">
+                                        Payer
+                                      </Typography>
+                                      <Typography variant="h3">{payer.name}</Typography>
+                                    </Box>
+                                    <Box
+                                      sx={{
+                                        p: 2,
+                                        borderRadius: `${INNER_RADIUS}px`,
+                                        bgcolor: alpha("#EF5B3C", 0.08),
+                                        border: "1px solid",
+                                        borderColor: alpha("#EF5B3C", 0.16)
+                                      }}
+                                    >
+                                      <Typography color="text.secondary">Collect</Typography>
+                                      <Typography variant="h2" color="primary.main">
+                                        {formatMoney(payer.netCents, settlement.data.currency)}
+                                      </Typography>
+                                    </Box>
+                                    <Grid container spacing={1.25}>
+                                      {[
+                                        { label: "Paid", value: formatMoney(payer.paidCents, settlement.data.currency) },
+                                        {
+                                          label: "Consumed",
+                                          value: formatMoney(payer.consumedCents, settlement.data.currency)
+                                        }
                                       ].map((metric) => (
-                                        <Grid size={{ xs: 12, md: 4 }} key={metric.label}>
+                                        <Grid size={{ xs: 12, sm: 6 }} key={metric.label}>
                                           <Box
                                             sx={{
-                                              p: 1.75,
-                                            borderRadius: "20px",
-                                            bgcolor: alpha("#1D1D1F", 0.03)
-                                          }}
+                                              p: 1.5,
+                                              borderRadius: `${INNER_RADIUS}px`,
+                                              bgcolor: alpha("#1D1D1F", 0.03)
+                                            }}
                                           >
                                             <Typography color="text.secondary">{metric.label}</Typography>
-                                            <Typography
-                                              variant="h5"
-                                              color={metric.label === "Gets back" ? "primary.main" : undefined}
-                                            >
-                                              {metric.value}
-                                            </Typography>
+                                            <Typography variant="h5">{metric.value}</Typography>
                                           </Box>
                                         </Grid>
                                       ))}
-                                  </Grid>
+                                    </Grid>
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+                            </Grid>
+                          )}
+
+                          <Grid size={{ xs: 12, lg: payer ? 7 : 12 }}>
+                            <Card
+                              variant="outlined"
+                              sx={{
+                                height: "100%",
+                                borderRadius: `${SURFACE_RADIUS}px`,
+                                borderColor: alpha("#1D1D1F", 0.08),
+                                bgcolor: alpha("#FFFFFF", 0.82)
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 2.25, md: 2.5 } }}>
+                                <Stack spacing={1.5}>
+                                  <Typography variant="h3">Who owes</Typography>
+                                  {payees.length > 0 ? (
+                                    <Stack spacing={1}>
+                                      {payees.map((person) => (
+                                        <Box
+                                          key={person.participantId}
+                                          sx={{
+                                            px: 1.75,
+                                            py: 1.5,
+                                            borderRadius: `${INNER_RADIUS}px`,
+                                            bgcolor: alpha("#1D1D1F", 0.03),
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                            alignItems: "center",
+                                            gap: 2
+                                          }}
+                                        >
+                                          <Typography variant="subtitle1" fontWeight={800}>
+                                            {person.name}
+                                          </Typography>
+                                          <Typography variant="h4" color="primary.main" fontWeight={900}>
+                                            {formatMoney(Math.abs(person.netCents), settlement.data.currency)}
+                                          </Typography>
+                                        </Box>
+                                      ))}
+                                    </Stack>
+                                  ) : (
+                                    <Typography color="text.secondary">
+                                      Everyone is already balanced. No reimbursements are needed.
+                                    </Typography>
+                                  )}
                                 </Stack>
                               </CardContent>
                             </Card>
-                          )}
-
-                          {payees.length > 0 && (
-                            <Stack spacing={1.5}>
-                              <Typography variant="h3">Who owes</Typography>
-                              <Grid container spacing={1.5}>
-                                {payees.map((person) => (
-                                  <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={person.participantId}>
-                                    <Card
-                                      variant="outlined"
-                                      sx={{
-                                        height: "100%",
-                                        borderRadius: "20px",
-                                        borderColor: alpha("#1D1D1F", 0.1)
-                                      }}
-                                    >
-                                        <CardContent sx={{ p: 2 }}>
-                                          <Stack spacing={0.75}>
-                                            <Typography variant="h6" fontWeight={800}>
-                                              {person.name}
-                                            </Typography>
-                                            <Typography variant="h4" color="primary.main" fontWeight={900}>
-                                              {formatMoney(Math.abs(person.netCents), settlement.data.currency)}
-                                            </Typography>
-                                          </Stack>
-                                        </CardContent>
-                                    </Card>
-                                  </Grid>
-                                ))}
-                              </Grid>
-                            </Stack>
-                          )}
-                        </Stack>
+                          </Grid>
+                        </Grid>
                       );
                     })()}
                   </Stack>

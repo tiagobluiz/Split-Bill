@@ -19,7 +19,7 @@ export const appTheme = createTheme({
     }
   },
   shape: {
-    borderRadius: 20
+    borderRadius: 16
   },
   typography: {
     fontFamily: "Public Sans, Segoe UI, Helvetica Neue, Arial, sans-serif",
@@ -33,7 +33,15 @@ export const appTheme = createTheme({
       fontSize: "clamp(1.75rem, 3vw, 2.6rem)"
     },
     h3: {
-      fontWeight: 700
+      fontWeight: 700,
+      fontSize: "clamp(1.3rem, 2vw, 1.7rem)"
+    },
+    h4: {
+      fontWeight: 700,
+      fontSize: "clamp(1.15rem, 1.8vw, 1.5rem)"
+    },
+    subtitle1: {
+      fontWeight: 600
     },
     button: {
       textTransform: "none",
@@ -44,32 +52,57 @@ export const appTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 24,
-          border: `1px solid ${alpha("#EF5B3C", 0.08)}`,
-          boxShadow: "0 24px 60px rgba(31, 23, 15, 0.08)"
+          borderRadius: 18,
+          border: `1px solid ${alpha("#1D1D1F", 0.08)}`,
+          boxShadow: "0 18px 42px rgba(31, 23, 15, 0.06)"
         }
       }
     },
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 999,
-          paddingInline: 18,
-          minHeight: 46
+          borderRadius: 14,
+          paddingInline: 16,
+          minHeight: 44,
+          boxShadow: "none"
         }
       }
     },
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 18
+          borderRadius: 14
+        }
+      }
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 20
         }
       }
     },
     MuiChip: {
       styleOverrides: {
         root: {
-          borderRadius: 999
+          borderRadius: 12,
+          fontWeight: 700
+        }
+      }
+    },
+    MuiToggleButtonGroup: {
+      styleOverrides: {
+        grouped: {
+          borderRadius: 12,
+          textTransform: "none",
+          fontWeight: 700
+        }
+      }
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          borderRadius: 14
         }
       }
     }
