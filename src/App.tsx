@@ -15,6 +15,7 @@ import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import PsychologyAltRoundedIcon from "@mui/icons-material/PsychologyAltRounded";
 import RemoveCircleOutlineRoundedIcon from "@mui/icons-material/RemoveCircleOutlineRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
+import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 import {
   closestCenter,
@@ -109,10 +110,10 @@ import type { ReceiptImportItem } from "./receipt-import/types";
 import { clearStoredDraft, loadStoredDraft, storeDraft } from "./storage";
 
 const STEP_LABELS = [
-  "People & payer",
-  "Items & prices",
-  "Consumption grid",
-  "Results"
+  "Participants",
+  "Items",
+  "Split",
+  "Balances"
 ] as const;
 
 const CURRENCY_OPTIONS = [
@@ -140,6 +141,8 @@ function SortableCard(props: {
   onMoveDown: () => void;
   disableMoveUp: boolean;
   disableMoveDown: boolean;
+  showMoveControls?: boolean;
+  tone?: "default" | "composer";
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: props.id
@@ -153,7 +156,10 @@ function SortableCard(props: {
         transition,
         overflow: "visible",
         borderRadius: `${SURFACE_RADIUS}px`,
-        borderColor: alpha("#1D1D1F", 0.08),
+        borderColor:
+          props.tone === "composer" ? alpha("#0F766E", 0.18) : alpha("#1D1D1F", 0.08),
+        borderStyle: props.tone === "composer" ? "dashed" : "solid",
+        bgcolor: props.tone === "composer" ? alpha("#0F766E", 0.025) : "background.paper",
         boxShadow: "0 14px 34px rgba(31, 23, 15, 0.05)"
       }}
     >
@@ -173,32 +179,34 @@ function SortableCard(props: {
             >
               <DragIndicatorRoundedIcon fontSize="small" />
             </IconButton>
-            <Stack direction="row" spacing={0.5}>
-              <Tooltip title="Move up">
-                <span>
-                  <IconButton
-                    onClick={props.onMoveUp}
-                    disabled={props.disableMoveUp}
-                    size="small"
-                    aria-label="Move item up"
-                  >
-                    <KeyboardArrowUpRoundedIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <Tooltip title="Move down">
-                <span>
-                  <IconButton
-                    onClick={props.onMoveDown}
-                    disabled={props.disableMoveDown}
-                    size="small"
-                    aria-label="Move item down"
-                  >
-                    <KeyboardArrowDownRoundedIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
+            {props.showMoveControls !== false && (
+              <Stack direction="row" spacing={0.5}>
+                <Tooltip title="Move up">
+                  <span>
+                    <IconButton
+                      onClick={props.onMoveUp}
+                      disabled={props.disableMoveUp}
+                      size="small"
+                      aria-label="Move item up"
+                    >
+                      <KeyboardArrowUpRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Move down">
+                  <span>
+                    <IconButton
+                      onClick={props.onMoveDown}
+                      disabled={props.disableMoveDown}
+                      size="small"
+                      aria-label="Move item down"
+                    >
+                      <KeyboardArrowDownRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              </Stack>
+            )}
           </Stack>
         </Stack>
         <Box sx={{ mt: 2 }}>{props.children}</Box>
@@ -223,8 +231,10 @@ function App() {
   const [pdfNoticeOpen, setPdfNoticeOpen] = useState(false);
   const [pdfErrorNoticeOpen, setPdfErrorNoticeOpen] = useState(false);
   const [exportPdfPending, setExportPdfPending] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importApplyDialogOpen, setImportApplyDialogOpen] = useState(false);
   const [startOverDialogOpen, setStartOverDialogOpen] = useState(false);
   const [importApplyMode, setImportApplyMode] = useState<"append" | "replace">("append");
@@ -1011,6 +1021,15 @@ function App() {
                       {STEP_SUMMARIES[activeStep]}
                     </Typography>
                   </Box>
+                  <Tooltip title="Receipt settings">
+                    <IconButton
+                      aria-label="Open receipt settings"
+                      onClick={() => setSettingsDialogOpen(true)}
+                      sx={{ alignSelf: { xs: "flex-start", md: "flex-start" } }}
+                    >
+                      <SettingsRoundedIcon />
+                    </IconButton>
+                  </Tooltip>
                 </Stack>
 
                 <Grid container spacing={1.5}>
@@ -1263,61 +1282,42 @@ function App() {
                   <Stack spacing={3}>
                     <Stack
                       direction={{ xs: "column", sm: "row" }}
-                      spacing={1.25}
+                      spacing={1.5}
                       alignItems={{ sm: "center" }}
                       justifyContent="space-between"
                     >
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} flexWrap="wrap" useFlexGap>
+                      <Box>
+                        <Typography variant="subtitle1">Receipt items</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Type directly below, or import a receipt.
+                        </Typography>
+                      </Box>
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                        alignItems={{ sm: "center" }}
+                        useFlexGap
+                      >
                         <Button
                           variant="outlined"
                           startIcon={<UploadFileRoundedIcon />}
-                          onClick={() => receiptInputRef.current?.click()}
+                          onClick={() => setImportDialogOpen(true)}
                           disabled={receiptImportStatus.state === "processing"}
-                          sx={{ alignSelf: "flex-start" }}
+                          sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
                         >
-                          {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
+                          {receiptImportStatus.state === "processing" ? "Importing..." : "Import"}
                         </Button>
                         <Button
-                          variant="outlined"
-                          startIcon={<PsychologyAltRoundedIcon />}
-                          onClick={() => setAiDialogOpen(true)}
-                          sx={{ alignSelf: "flex-start" }}
+                          variant="text"
+                          color="inherit"
+                          startIcon={<RestartAltRoundedIcon />}
+                          onClick={resetItems}
+                          disabled={items.length === 0 || receiptImportStatus.state === "processing"}
+                          sx={{ alignSelf: { xs: "stretch", sm: "center" } }}
                         >
-                          Ask AI
+                          Reset items
                         </Button>
-                        <Button
-                          variant="outlined"
-                          startIcon={<ContentPasteRoundedIcon />}
-                          onClick={() => setPasteDialogOpen(true)}
-                          sx={{ alignSelf: "flex-start" }}
-                        >
-                          Paste list
-                        </Button>
-                        <TextField
-                          select
-                          label="Currency"
-                          size="small"
-                          value={currency}
-                          onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
-                          sx={{ minWidth: { xs: "100%", sm: 200 } }}
-                        >
-                          {CURRENCY_OPTIONS.map((option) => (
-                            <MenuItem key={option.code} value={option.code}>
-                              {option.label}
-                            </MenuItem>
-                          ))}
-                        </TextField>
                       </Stack>
-                      <Button
-                        variant="text"
-                        color="inherit"
-                        startIcon={<RestartAltRoundedIcon />}
-                        onClick={resetItems}
-                        disabled={items.length === 0 || receiptImportStatus.state === "processing"}
-                        sx={{ alignSelf: { xs: "flex-start", sm: "flex-end" } }}
-                      >
-                        Reset items
-                      </Button>
                       <input
                         ref={receiptInputRef}
                         aria-label="Import receipt file"
@@ -1379,9 +1379,11 @@ function App() {
                                 onMoveDown={() => reorderItems(index, index + 1)}
                                 disableMoveUp={index === 0}
                                 disableMoveDown={index === items.length - 1}
+                                showMoveControls={false}
+                                tone={!item.name.trim() && !item.price.trim() ? "composer" : "default"}
                               >
                                 <Stack spacing={1.75}>
-                                  <Grid container spacing={2}>
+                                  <Grid container spacing={1.5}>
                                     <Grid size={{ xs: 12, md: 7 }}>
                                       <TextField
                                         label="Item name"
@@ -1445,14 +1447,19 @@ function App() {
                                       />
                                     </Grid>
                                     <Grid size={{ xs: 12, md: 1 }}>
-                                      <IconButton
-                                        aria-label={`Delete ${item.name || `item ${index + 1}`}`}
-                                        onClick={() => removeItem(index)}
+                                      <Stack
+                                        direction="row"
+                                        justifyContent={{ xs: "flex-end", md: "flex-start" }}
                                         sx={{ mt: { md: 1 } }}
-                                        type="button"
                                       >
-                                        <DeleteOutlineRoundedIcon />
-                                      </IconButton>
+                                        <IconButton
+                                          aria-label={`Delete ${item.name || `item ${index + 1}`}`}
+                                          onClick={() => removeItem(index)}
+                                          type="button"
+                                        >
+                                          <DeleteOutlineRoundedIcon />
+                                        </IconButton>
+                                      </Stack>
                                     </Grid>
                                   </Grid>
                                 </Stack>
@@ -2000,6 +2007,130 @@ function App() {
           <Button variant="contained" onClick={restoreDraft}>
             Restore draft
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Import items</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.25} sx={{ pt: 1 }}>
+            <Grid container spacing={1.25}>
+              {[
+                {
+                  icon: <PsychologyAltRoundedIcon color="primary" />,
+                  title: "Ask AI",
+                  description: "Preferred. Usually the most accurate way to turn a receipt into a clean item list.",
+                  onClick: () => {
+                    setImportDialogOpen(false);
+                    setAiDialogOpen(true);
+                  },
+                  recommended: true
+                },
+                {
+                  icon: <ContentPasteRoundedIcon color="primary" />,
+                  title: "Paste list",
+                  description: "Paste a simple item list or CSV and import it directly.",
+                  onClick: () => {
+                    setImportDialogOpen(false);
+                    setPasteDialogOpen(true);
+                  }
+                },
+                {
+                  icon: <UploadFileRoundedIcon color="primary" />,
+                  title: "Import receipt",
+                  description: "Fastest direct option, but accuracy can vary depending on the receipt.",
+                  onClick: () => {
+                    setImportDialogOpen(false);
+                    receiptInputRef.current?.click();
+                  },
+                  disabled: receiptImportStatus.state === "processing"
+                }
+              ].map((option) => (
+                <Grid size={12} key={option.title}>
+                  <Card
+                    variant="outlined"
+                    sx={{
+                      borderRadius: `${INNER_RADIUS}px`,
+                      borderColor: alpha("#1D1D1F", 0.08),
+                      bgcolor: alpha("#FFFFFF", 0.86)
+                    }}
+                  >
+                    <ButtonBase
+                      onClick={option.onClick}
+                      disabled={option.disabled}
+                      sx={{
+                        width: "100%",
+                        textAlign: "left",
+                        p: 1.5,
+                        display: "block",
+                        borderRadius: `${INNER_RADIUS}px`
+                      }}
+                    >
+                      <Stack direction="row" spacing={1.25} alignItems="flex-start">
+                        <Box
+                          sx={{
+                            width: 40,
+                            height: 40,
+                            borderRadius: 999,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            bgcolor: alpha("#EF5B3C", 0.08),
+                            flexShrink: 0
+                          }}
+                        >
+                          {option.icon}
+                        </Box>
+                        <Stack spacing={0.35} minWidth={0}>
+                          <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
+                            <Typography fontWeight={800}>{option.title}</Typography>
+                            {"recommended" in option && option.recommended && (
+                              <Chip
+                                label="Recommended"
+                                size="small"
+                                color="primary"
+                                sx={{ fontWeight: 700 }}
+                              />
+                            )}
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary">
+                            {option.description}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </ButtonBase>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Receipt settings</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 1 }}>
+            <TextField
+              select
+              label="Currency"
+              value={currency}
+              onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
+              fullWidth
+            >
+              {CURRENCY_OPTIONS.map((option) => (
+                <MenuItem key={option.code} value={option.code}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSettingsDialogOpen(false)}>Done</Button>
         </DialogActions>
       </Dialog>
 
