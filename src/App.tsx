@@ -81,7 +81,10 @@ import {
   createId,
   formatMoney,
   formatMoneyTrailingSymbol,
+  ITEM_AMOUNT_MAX_CENTS,
+  ITEM_AMOUNT_TOO_HIGH_MESSAGE,
   parseMoneyToCents,
+  PARTICIPANT_NAME_MAX_LENGTH,
   rebalancePercentAllocations,
   resetPercentAllocations,
   resetShareAllocations,
@@ -94,7 +97,13 @@ import {
   validateStepThree,
   validateStepTwo
 } from "./domain/splitter";
-import { buildReceiptLlmPrompt, getReceiptLlmProviderUrl, type LlmProvider } from "./receipt-import/llmHandoff";
+import {
+  buildReceiptLlmPrompt,
+  getReceiptLlmLaunchTarget,
+  getReceiptLlmProviderUrl,
+  isMobileUserAgent,
+  type LlmProvider
+} from "./receipt-import/llmHandoff";
 import { parsePastedItems } from "./receipt-import/parsePastedItems";
 import type { ReceiptImportItem } from "./receipt-import/types";
 import { clearStoredDraft, loadStoredDraft, storeDraft } from "./storage";
@@ -198,18 +207,6 @@ function SortableCard(props: {
   );
 }
 
-function getCurrencyNarrowSymbol(currency: string, locale = navigator.language) {
-  const currencyPart = new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    currencyDisplay: "narrowSymbol"
-  })
-    .formatToParts(0)
-    .find((part) => part.type === "currency")?.value;
-
-  return currencyPart ?? currency;
-}
-
 function App() {
   const storedDraft = loadStoredDraft();
   const [hasStarted, setHasStarted] = useState(false);
@@ -229,6 +226,7 @@ function App() {
   const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [importApplyDialogOpen, setImportApplyDialogOpen] = useState(false);
+  const [startOverDialogOpen, setStartOverDialogOpen] = useState(false);
   const [importApplyMode, setImportApplyMode] = useState<"append" | "replace">("append");
   const [pasteInput, setPasteInput] = useState("");
   const [pendingImportedItems, setPendingImportedItems] = useState<ReceiptImportItem[]>([]);
@@ -269,6 +267,20 @@ function App() {
   const payerParticipantId = (useWatch({ control, name: "payerParticipantId" }) ?? "") as string;
   const currency = (useWatch({ control, name: "currency" }) ?? "EUR") as string;
 
+  function stripTrailingEmptyItemDraft(values: SplitFormValues) {
+    const nextItems = [...values.items];
+    const lastItem = nextItems.at(-1);
+
+    if (lastItem && !lastItem.name.trim() && !lastItem.price.trim()) {
+      nextItems.pop();
+    }
+
+    return {
+      ...values,
+      items: nextItems
+    };
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -291,10 +303,24 @@ function App() {
       return;
     }
 
-    if (validateStepTwo(watchedValues).length === 0) {
+    if (validateStepTwo(stripTrailingEmptyItemDraft(watchedValues)).length === 0) {
       setHasUnlockedFullNavigation(true);
     }
   }, [activeStep, hasUnlockedFullNavigation, watchedValues]);
+
+  useEffect(() => {
+    if (activeStep !== 1) {
+      return;
+    }
+
+    const hasTrailingDraft = items.some((item) => !item.name.trim() && !item.price.trim());
+
+    if (hasTrailingDraft) {
+      return;
+    }
+
+    addItem();
+  }, [activeStep, items]);
 
   function applyStepErrors(stepErrors: Array<{ path: string; message: string }>) {
     stepErrors.forEach((error) => {
@@ -315,7 +341,8 @@ function App() {
     }
 
     if (activeStep === 1) {
-      const stepErrors = validateStepTwo(getValues());
+      const nextValues = stripTrailingEmptyItemDraft(getValues());
+      const stepErrors = validateStepTwo(nextValues);
       applyStepErrors(stepErrors);
       return stepErrors.length === 0;
     }
@@ -332,6 +359,15 @@ function App() {
   function handleNext() {
     if (!validateCurrentStep()) {
       return;
+    }
+
+    if (activeStep === 1) {
+      const currentValues = getValues();
+      const normalizedValues = stripTrailingEmptyItemDraft(currentValues);
+
+      if (normalizedValues.items.length !== currentValues.items.length) {
+        reset(normalizedValues);
+      }
     }
 
     const nextStep = Math.min(activeStep + 1, STEP_LABELS.length - 1);
@@ -364,7 +400,7 @@ function App() {
     }
 
     if (targetStep >= 2 && activeStep >= 1) {
-      return validateStepTwo(getValues()).length === 0;
+      return validateStepTwo(stripTrailingEmptyItemDraft(getValues())).length === 0;
     }
 
     return false;
@@ -373,6 +409,15 @@ function App() {
   function handleStepNavigation(targetStep: number) {
     if (!canNavigateToStep(targetStep)) {
       return;
+    }
+
+    if (activeStep === 1 && targetStep >= 2) {
+      const currentValues = getValues();
+      const normalizedValues = stripTrailingEmptyItemDraft(currentValues);
+
+      if (normalizedValues.items.length !== currentValues.items.length) {
+        reset(normalizedValues);
+      }
     }
 
     if (targetStep >= 2) {
@@ -423,12 +468,37 @@ function App() {
     });
   }
 
-  function addItem() {
+  function addItem(name = "", price = "") {
     const currentValues = getValues();
+    const hasExistingDraft =
+      !name &&
+      !price &&
+      currentValues.items.some((item) => !item.name.trim() && !item.price.trim());
+
+    if (hasExistingDraft) {
+      const existingDraftIndex = currentValues.items.findIndex(
+        (item) => !item.name.trim() && !item.price.trim()
+      );
+
+      window.setTimeout(() => {
+        const nextInput = document.querySelector<HTMLInputElement>(
+          `input[name="items.${existingDraftIndex}.name"]`
+        );
+        nextInput?.focus();
+      }, 0);
+      return;
+    }
 
     reset({
       ...currentValues,
-      items: [...currentValues.items, createEmptyItem(currentValues.participants)]
+      items: [
+        ...currentValues.items,
+        {
+          ...createEmptyItem(currentValues.participants),
+          name,
+          price
+        }
+      ]
     });
   }
 
@@ -691,18 +761,28 @@ function App() {
     reset(createDefaultValues());
     setActiveStep(0);
     setHasUnlockedFullNavigation(false);
-    setHasStarted(false);
+    setHasStarted(true);
     setReceiptImportStatus({ state: "idle" });
   }
 
+  function requestStartOver() {
+    setStartOverDialogOpen(true);
+  }
+
+  function confirmStartOver() {
+    setStartOverDialogOpen(false);
+    startOver();
+  }
+
   async function copySummary() {
-    const settlement = computeSettlement(getValues());
+    const normalizedValues = stripTrailingEmptyItemDraft(getValues());
+    const settlement = computeSettlement(normalizedValues);
     if (!settlement.ok) {
       return;
     }
 
     const summary = [
-      "Split-Bill summary",
+      "Split Bill summary",
       ...settlement.data.people.map(
         (person) => {
           if (person.isPayer) {
@@ -719,7 +799,8 @@ function App() {
   }
 
   async function exportSummaryPdf() {
-    const settlement = computeSettlement(getValues());
+    const normalizedValues = stripTrailingEmptyItemDraft(getValues());
+    const settlement = computeSettlement(normalizedValues);
     if (!settlement.ok) {
       return;
     }
@@ -729,7 +810,7 @@ function App() {
 
     try {
       const { exportSettlementPdf } = await import("./pdf/exportSettlementPdf");
-      await exportSettlementPdf(getValues());
+      await exportSettlementPdf(normalizedValues);
       setPdfNoticeOpen(true);
     } catch {
       setPdfErrorNoticeOpen(true);
@@ -771,7 +852,12 @@ function App() {
   }
 
   async function launchLlmHandoff(provider: LlmProvider) {
-    window.open(getReceiptLlmProviderUrl(provider), "_blank", "noopener,noreferrer");
+    const isMobile = isMobileUserAgent(navigator.userAgent);
+    window.open(
+      getReceiptLlmProviderUrl(provider, isMobile),
+      getReceiptLlmLaunchTarget(isMobile),
+      "noopener,noreferrer"
+    );
 
     try {
       await writeLlmPromptToClipboard();
@@ -811,7 +897,60 @@ function App() {
   }
 
   const parsedPasteResult = useMemo(() => parsePastedItems(pasteInput), [pasteInput]);
-  const settlement = computeSettlement(deferredValues);
+  const normalizedWatchedValues = useMemo(
+    () => stripTrailingEmptyItemDraft(watchedValues),
+    [watchedValues]
+  );
+  const normalizedDeferredValues = useMemo(
+    () => stripTrailingEmptyItemDraft(deferredValues),
+    [deferredValues]
+  );
+  const settlement = computeSettlement(normalizedDeferredValues);
+  const canAddParticipant = participantInput.trim().length > 0;
+  const visibleStepThreeItems = useMemo(
+    () =>
+      items
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => item.name.trim().length > 0 || item.price.trim().length > 0),
+    [items]
+  );
+  const currentStepIsValid = useMemo(() => {
+    if (activeStep === 0) {
+      return validateStepOne(watchedValues).length === 0;
+    }
+
+    if (activeStep === 1) {
+      return validateStepTwo(stripTrailingEmptyItemDraft(watchedValues)).length === 0;
+    }
+
+    if (activeStep === 2) {
+      return validateStepThree(normalizedWatchedValues).length === 0;
+    }
+
+    return true;
+  }, [activeStep, normalizedWatchedValues, watchedValues]);
+  const currentStepFooterErrors = useMemo(() => {
+    if (activeStep !== 0 || currentStepIsValid) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        validateStepOne(watchedValues)
+          .map((error) => error.message)
+          .filter((message) => message !== "Add at least two participants, including the payer.")
+      )
+    );
+  }, [activeStep, currentStepIsValid, watchedValues]);
+  const resultsStepErrors = useMemo(() => {
+    if (activeStep !== 3 || settlement.ok) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(validateStepThree(normalizedWatchedValues).map((error) => error.message))
+    );
+  }, [activeStep, normalizedWatchedValues, settlement.ok]);
 
   return (
     <Box
@@ -958,73 +1097,11 @@ function App() {
 
                 {activeStep === 0 && (
                   <Stack spacing={3}>
-                    <Grid container spacing={2}>
-                      <Grid size={{ xs: 12, lg: 8 }}>
-                        <Card
-                          variant="outlined"
-                          sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08) }}
-                        >
-                          <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-                            <Stack spacing={1.5}>
-                              <Typography variant="subtitle1">Add people</Typography>
-                              <Stack
-                                direction={{ xs: "column", md: "row" }}
-                                spacing={1.25}
-                                alignItems={{ md: "center" }}
-                              >
-                                <TextField
-                                  label="Add participant"
-                                  placeholder="Ana"
-                                  value={participantInput}
-                                  onChange={(event) => setParticipantInput(event.target.value)}
-                                  onKeyDown={(event) => {
-                                    if (event.key === "Enter") {
-                                      event.preventDefault();
-                                      addParticipant();
-                                    }
-                                  }}
-                                  fullWidth
-                                />
-                                <Button
-                                  variant="contained"
-                                  startIcon={<AddRoundedIcon />}
-                                  onClick={addParticipant}
-                                  sx={{ minWidth: { md: 132 } }}
-                                >
-                                  Add person
-                                </Button>
-                              </Stack>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                      <Grid size={{ xs: 12, lg: 4 }}>
-                        <Card
-                          variant="outlined"
-                          sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08) }}
-                        >
-                          <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-                            <Stack spacing={1.5}>
-                              <Typography variant="subtitle1">Receipt currency</Typography>
-                              <TextField
-                                select
-                                label="Currency"
-                                size="small"
-                                value={currency}
-                                onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
-                                fullWidth
-                              >
-                                {CURRENCY_OPTIONS.map((option) => (
-                                  <MenuItem key={option.code} value={option.code}>
-                                    {option.label}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    </Grid>
+                    {participants.length < 2 && (
+                      <Alert severity="info">
+                        Add at least two people to continue.
+                      </Alert>
+                    )}
 
                     {errors.participants?.message && (
                       <Alert severity="error">{errors.participants.message}</Alert>
@@ -1049,17 +1126,28 @@ function App() {
                               }}
                             >
                               <CardContent sx={{ p: { xs: 2, md: 2.25 } }}>
-                                <Stack spacing={1.5}>
-                                  <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                    <Chip icon={<PersonRoundedIcon />} label={`Person ${index + 1}`} variant="outlined" />
-                                    <IconButton
-                                      aria-label={`Remove ${participant.name || `participant ${index + 1}`}`}
-                                      onClick={() => removeParticipant(index)}
-                                      type="button"
-                                      size="small"
-                                    >
-                                      <DeleteOutlineRoundedIcon />
-                                    </IconButton>
+                                <Stack spacing={1.25}>
+                                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                                    <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
+                                      <Chip icon={<PersonRoundedIcon />} label={`Person ${index + 1}`} variant="outlined" />
+                                      {payerParticipantId === participant.id && (
+                                        <Chip
+                                          icon={<PaidRoundedIcon />}
+                                          label="Payer"
+                                          color="primary"
+                                          sx={{ fontWeight: 700 }}
+                                        />
+                                      )}
+                                      {payerParticipantId !== participant.id && (
+                                        <Chip
+                                          label="🏦 Set as payer"
+                                          variant="outlined"
+                                          clickable
+                                          onClick={() => setValue("payerParticipantId", participant.id)}
+                                          sx={{ fontWeight: 700 }}
+                                        />
+                                      )}
+                                    </Stack>
                                   </Stack>
                                   <TextField
                                     label="Name"
@@ -1067,31 +1155,102 @@ function App() {
                                     {...register(`participants.${index}.name` as const)}
                                     error={Boolean(participantError)}
                                     helperText={participantError}
+                                    inputProps={{ maxLength: PARTICIPANT_NAME_MAX_LENGTH }}
+                                    InputProps={{
+                                      endAdornment: (
+                                        <InputAdornment position="end">
+                                          <IconButton
+                                            aria-label={`Remove ${participant.name || `participant ${index + 1}`}`}
+                                            onClick={() => removeParticipant(index)}
+                                            type="button"
+                                            size="small"
+                                            edge="end"
+                                          >
+                                            <DeleteOutlineRoundedIcon />
+                                          </IconButton>
+                                        </InputAdornment>
+                                      )
+                                    }}
                                   />
-                                  <Stack
-                                    direction={{ xs: "column", sm: "row" }}
-                                    spacing={1}
-                                    justifyContent="space-between"
-                                    alignItems={{ sm: "center" }}
-                                  >
-                                    <Typography color="text.secondary">
-                                      {payerParticipantId === participant.id ? "This person paid the receipt." : "Participant in the split."}
-                                    </Typography>
-                                    <Button
-                                      variant={payerParticipantId === participant.id ? "contained" : "outlined"}
-                                      color={payerParticipantId === participant.id ? "primary" : "inherit"}
-                                      onClick={() => setValue("payerParticipantId", participant.id)}
-                                      startIcon={<PaidRoundedIcon />}
-                                    >
-                                      {payerParticipantId === participant.id ? "Payer" : "Set as payer"}
-                                    </Button>
-                                  </Stack>
                                 </Stack>
                               </CardContent>
                             </Card>
                           </Grid>
                         );
                       })}
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Card
+                          variant="outlined"
+                          sx={{
+                            borderRadius: `${SURFACE_RADIUS}px`,
+                            borderColor: alpha("#1D1D1F", 0.08),
+                            borderStyle: "solid",
+                            borderWidth: 1,
+                            bgcolor: "background.paper"
+                          }}
+                        >
+                          <CardContent sx={{ p: { xs: 2, md: 2.25 } }}>
+                            <Stack spacing={1.25}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                                <Chip
+                                  icon={<AddRoundedIcon />}
+                                  label="New participant"
+                                  variant="outlined"
+                                />
+                              </Stack>
+                              <Stack
+                                direction={{ xs: "column", sm: "row" }}
+                                spacing={1.25}
+                                alignItems={{ sm: "center" }}
+                              >
+                              <TextField
+                                label="Name"
+                                placeholder="Participant name"
+                                name="participant-draft-name"
+                                value={participantInput}
+                                onChange={(event) => setParticipantInput(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    if (!canAddParticipant) {
+                                      handleNext();
+                                      return;
+                                    }
+                                    addParticipant();
+                                  }
+                                }}
+                                fullWidth
+                                inputProps={{ maxLength: PARTICIPANT_NAME_MAX_LENGTH }}
+                                InputProps={{
+                                  endAdornment: (
+                                    <InputAdornment position="end">
+                                      <IconButton
+                                        aria-label="Add person"
+                                        onClick={addParticipant}
+                                        disabled={!canAddParticipant}
+                                        type="button"
+                                        edge="end"
+                                        size="small"
+                                        color="primary"
+                                        sx={{
+                                          bgcolor: canAddParticipant ? alpha("#EF5B3C", 0.08) : "transparent",
+                                          "&:hover": {
+                                            bgcolor: canAddParticipant ? alpha("#EF5B3C", 0.14) : "transparent"
+                                          }
+                                        }}
+                                      >
+                                        <AddRoundedIcon />
+                                      </IconButton>
+                                    </InputAdornment>
+                                  )
+                                }}
+                              />
+                            </Stack>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      </Grid>
                     </Grid>
 
                     {errors.payerParticipantId?.message && (
@@ -1103,66 +1262,51 @@ function App() {
                 {activeStep === 1 && (
                   <Stack spacing={3}>
                     <Stack
-                      direction={{ xs: "column", lg: "row" }}
-                      spacing={2}
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1.25}
+                      alignItems={{ sm: "center" }}
                       justifyContent="space-between"
-                      alignItems={{ lg: "flex-start" }}
                     >
-                      <Stack spacing={1.5} sx={{ flex: 1 }}>
-                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ sm: "center" }}>
-                          <Button
-                            variant="contained"
-                            startIcon={<AddRoundedIcon />}
-                            onClick={addItem}
-                            sx={{ alignSelf: "flex-start" }}
-                          >
-                            Add item
-                          </Button>
-                          <Typography color="text.secondary">
-                            Manual entry stays primary. Use imports only when they speed up the receipt.
-                          </Typography>
-                        </Stack>
-                        <Card
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} flexWrap="wrap" useFlexGap>
+                        <Button
                           variant="outlined"
-                          sx={{
-                            borderRadius: `${SURFACE_RADIUS}px`,
-                            borderColor: alpha("#1D1D1F", 0.08),
-                            bgcolor: alpha("#FFFFFF", 0.76)
-                          }}
+                          startIcon={<UploadFileRoundedIcon />}
+                          onClick={() => receiptInputRef.current?.click()}
+                          disabled={receiptImportStatus.state === "processing"}
+                          sx={{ alignSelf: "flex-start" }}
                         >
-                          <CardContent sx={{ p: { xs: 1.75, md: 2 } }}>
-                            <Stack spacing={1.25}>
-                              <Typography variant="subtitle1">Import tools</Typography>
-                              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} flexWrap="wrap" useFlexGap>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<UploadFileRoundedIcon />}
-                                  onClick={() => receiptInputRef.current?.click()}
-                                  disabled={receiptImportStatus.state === "processing"}
-                                  sx={{ alignSelf: "flex-start" }}
-                                >
-                                  {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<PsychologyAltRoundedIcon />}
-                                  onClick={() => setAiDialogOpen(true)}
-                                  sx={{ alignSelf: "flex-start" }}
-                                >
-                                  Ask AI
-                                </Button>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<ContentPasteRoundedIcon />}
-                                  onClick={() => setPasteDialogOpen(true)}
-                                  sx={{ alignSelf: "flex-start" }}
-                                >
-                                  Paste list
-                                </Button>
-                              </Stack>
-                            </Stack>
-                          </CardContent>
-                        </Card>
+                          {receiptImportStatus.state === "processing" ? "Importing receipt..." : "Import receipt"}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<PsychologyAltRoundedIcon />}
+                          onClick={() => setAiDialogOpen(true)}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Ask AI
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<ContentPasteRoundedIcon />}
+                          onClick={() => setPasteDialogOpen(true)}
+                          sx={{ alignSelf: "flex-start" }}
+                        >
+                          Paste list
+                        </Button>
+                        <TextField
+                          select
+                          label="Currency"
+                          size="small"
+                          value={currency}
+                          onChange={(event) => setValue("currency", event.target.value.toUpperCase())}
+                          sx={{ minWidth: { xs: "100%", sm: 200 } }}
+                        >
+                          {CURRENCY_OPTIONS.map((option) => (
+                            <MenuItem key={option.code} value={option.code}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </TextField>
                       </Stack>
                       <Button
                         variant="text"
@@ -1170,7 +1314,7 @@ function App() {
                         startIcon={<RestartAltRoundedIcon />}
                         onClick={resetItems}
                         disabled={items.length === 0 || receiptImportStatus.state === "processing"}
-                        sx={{ alignSelf: { xs: "flex-start", lg: "center" } }}
+                        sx={{ alignSelf: { xs: "flex-start", sm: "flex-end" } }}
                       >
                         Reset items
                       </Button>
@@ -1217,8 +1361,15 @@ function App() {
                       <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                         <Stack spacing={2}>
                           {items.map((item, index) => {
-                            const itemNameError = errors.items?.[index]?.name?.message;
+                            const parsedItemAmount = parseMoneyToCents(item.price);
+                            const itemNameMissingWithPrice =
+                              item.price.trim().length > 0 && parsedItemAmount !== null && !item.name.trim();
+                            const itemNameError =
+                              (itemNameMissingWithPrice ? "This item needs a name." : undefined) ??
+                              errors.items?.[index]?.name?.message;
                             const itemPriceError = errors.items?.[index]?.price?.message;
+                            const itemPriceTooHigh =
+                              parsedItemAmount !== null && Math.abs(parsedItemAmount) > ITEM_AMOUNT_MAX_CENTS;
 
                             return (
                               <SortableCard
@@ -1229,98 +1380,86 @@ function App() {
                                 disableMoveUp={index === 0}
                                 disableMoveDown={index === items.length - 1}
                               >
-                                <Stack spacing={1.5}>
-                                  <Stack
-                                    direction={{ xs: "column", sm: "row" }}
-                                    spacing={1}
-                                    justifyContent="space-between"
-                                    alignItems={{ sm: "center" }}
-                                  >
-                                    <Typography variant="subtitle1">Receipt line {index + 1}</Typography>
-                                    <Typography
-                                      variant="subtitle1"
-                                      color={item.price ? "primary.main" : "text.secondary"}
-                                      sx={{ fontWeight: 800 }}
-                                    >
-                                      {item.price
-                                        ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
-                                        : "No price yet"}
-                                    </Typography>
-                                  </Stack>
+                                <Stack spacing={1.75}>
                                   <Grid container spacing={2}>
-                                  <Grid size={{ xs: 12, md: 7 }}>
-                                    <TextField
-                                      label="Item name"
-                                      placeholder="Tomatoes"
-                                      fullWidth
-                                      {...register(`items.${index}.name` as const)}
-                                      error={Boolean(itemNameError)}
-                                      helperText={itemNameError}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                          event.preventDefault();
-                                          handleItemSubmitFromEnter(index);
+                                    <Grid size={{ xs: 12, md: 7 }}>
+                                      <TextField
+                                        label="Item name"
+                                        placeholder="Tomatoes"
+                                        fullWidth
+                                        {...register(`items.${index}.name` as const)}
+                                        error={Boolean(itemNameError)}
+                                        helperText={itemNameError}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            event.preventDefault();
+                                            handleItemSubmitFromEnter(index);
+                                          }
+                                        }}
+                                        sx={{
+                                          "& .MuiInputAdornment-root": {
+                                            color: "text.secondary",
+                                            fontWeight: 700
+                                          },
+                                          "& .MuiInputBase-input": {
+                                            fontWeight: 700
+                                          }
+                                        }}
+                                        InputProps={{
+                                          startAdornment: <InputAdornment position="start">#{index + 1}</InputAdornment>
+                                        }}
+                                      />
+                                    </Grid>
+                                    <Grid size={{ xs: 12, md: 4 }}>
+                                      <TextField
+                                        label="Price"
+                                        placeholder="3.49"
+                                        fullWidth
+                                        {...register(`items.${index}.price` as const)}
+                                        error={Boolean(itemPriceError) || itemPriceTooHigh}
+                                        helperText={
+                                          itemPriceTooHigh
+                                            ? `${ITEM_AMOUNT_TOO_HIGH_MESSAGE} ${currency}.`
+                                            : itemPriceError
                                         }
-                                      }}
-                                      sx={{
-                                        "& .MuiInputAdornment-root": {
-                                          color: "text.secondary",
-                                          fontWeight: 700
-                                        },
-                                        "& .MuiInputBase-input": {
-                                          fontWeight: 700,
-                                          fontSize: "1rem"
-                                        }
-                                      }}
-                                      InputProps={{
-                                        startAdornment: (
-                                          <InputAdornment position="start">#{index + 1}</InputAdornment>
-                                        )
-                                      }}
-                                    />
-                                  </Grid>
-                                  <Grid size={{ xs: 12, md: 4 }}>
-                                    <TextField
-                                      label="Price"
-                                      placeholder="3.49"
-                                      fullWidth
-                                      {...register(`items.${index}.price` as const)}
-                                      error={Boolean(itemPriceError)}
-                                      helperText={itemPriceError}
-                                      InputProps={{
-                                        startAdornment: (
-                                          <InputAdornment position="start">{getCurrencyNarrowSymbol(currency)}</InputAdornment>
-                                        )
-                                      }}
-                                      onKeyDown={(event) => {
-                                        if (event.key === "Enter") {
-                                          event.preventDefault();
-                                          handleItemSubmitFromEnter(index);
-                                        }
-                                      }}
-                                      sx={{
-                                        "& .MuiInputBase-input": {
-                                          fontWeight: 800,
-                                          fontSize: "1rem"
-                                        }
-                                      }}
-                                    />
-                                  </Grid>
-                                  <Grid size={{ xs: 12, md: 1 }}>
-                                    <IconButton
-                                      aria-label={`Delete ${item.name || `item ${index + 1}`}`}
-                                      onClick={() => removeItem(index)}
-                                      sx={{ mt: { md: 1 } }}
-                                      type="button"
-                                    >
-                                      <DeleteOutlineRoundedIcon />
-                                    </IconButton>
-                                  </Grid>
+                                        InputProps={{
+                                          startAdornment: (
+                                            <InputAdornment position="start">{currency}</InputAdornment>
+                                          )
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            event.preventDefault();
+                                            handleItemSubmitFromEnter(index);
+                                          }
+                                        }}
+                                        inputProps={{
+                                          inputMode: "decimal",
+                                          maxLength: String(ITEM_AMOUNT_MAX_CENTS / 100).length + 3
+                                        }}
+                                        sx={{
+                                          "& .MuiInputBase-input": {
+                                            fontWeight: 700
+                                          }
+                                        }}
+                                      />
+                                    </Grid>
+                                    <Grid size={{ xs: 12, md: 1 }}>
+                                      <IconButton
+                                        aria-label={`Delete ${item.name || `item ${index + 1}`}`}
+                                        onClick={() => removeItem(index)}
+                                        sx={{ mt: { md: 1 } }}
+                                        type="button"
+                                      >
+                                        <DeleteOutlineRoundedIcon />
+                                      </IconButton>
+                                    </Grid>
                                   </Grid>
                                 </Stack>
                               </SortableCard>
                             );
                           })}
+
                         </Stack>
                       </SortableContext>
                     </DndContext>
@@ -1345,9 +1484,12 @@ function App() {
                       modifiers={[restrictToVerticalAxis]}
                       onDragEnd={handleItemDragEnd}
                     >
-                      <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+                      <SortableContext
+                        items={visibleStepThreeItems.map(({ item }) => item.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
                         <Stack spacing={1.5}>
-                          {items.map((item, itemIndex) => {
+                          {visibleStepThreeItems.map(({ item, index: itemIndex }) => {
                             const deferredItem =
                               deferredValues.items.find((entry) => entry.id === item.id) ?? item;
                             const itemPreview = computeItemPreview(
@@ -1369,7 +1511,10 @@ function App() {
                                 onMoveUp={() => reorderItems(itemIndex, itemIndex - 1)}
                                 onMoveDown={() => reorderItems(itemIndex, itemIndex + 1)}
                                 disableMoveUp={itemIndex === 0}
-                                disableMoveDown={itemIndex === items.length - 1}
+                                disableMoveDown={
+                                  itemIndex ===
+                                  visibleStepThreeItems[visibleStepThreeItems.length - 1]?.index
+                                }
                               >
                                 <Stack spacing={2}>
                                   <Stack
@@ -1779,28 +1924,62 @@ function App() {
 
                 {activeStep === 3 && !settlement.ok && (
                   <Alert severity="error">
-                    Fix the earlier steps before viewing the final settlement.
+                    <Stack spacing={0.25}>
+                      <Typography variant="body2" fontWeight={700}>
+                        Fix these items before viewing the final settlement:
+                      </Typography>
+                      {(resultsStepErrors.length > 0
+                        ? resultsStepErrors
+                        : ["The split is still invalid. Review the previous steps and adjust the receipt or allocation."])
+                        .map((message) => (
+                          <Typography key={message} variant="body2">
+                            {message}
+                          </Typography>
+                        ))}
+                    </Stack>
                   </Alert>
                 )}
 
-                <Stack
-                  direction={{ xs: "column-reverse", sm: "row" }}
-                  spacing={1.25}
-                  justifyContent="space-between"
-                  alignItems={{ sm: "center" }}
-                >
-                  <Button variant="text" onClick={handleBack} disabled={activeStep === 0}>
-                    Back
-                  </Button>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
-                    <Button variant="outlined" onClick={startOver}>
-                      Reset draft
+                <Stack spacing={1.25}>
+                  {currentStepFooterErrors.length > 0 && (
+                    <Alert severity="error" sx={{ width: "100%" }}>
+                      <Stack spacing={0.25}>
+                        {currentStepFooterErrors.map((message) => (
+                          <Typography key={message} variant="body2">
+                            {message}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    </Alert>
+                  )}
+                  <Stack
+                    direction={{ xs: "column-reverse", sm: "row" }}
+                    spacing={1.25}
+                    justifyContent="space-between"
+                    alignItems={{ sm: "center" }}
+                  >
+                    <Button variant="text" onClick={handleBack} disabled={activeStep === 0}>
+                      Back
                     </Button>
-                    {activeStep < STEP_LABELS.length - 1 && (
-                      <Button variant="contained" endIcon={<ArrowForwardRoundedIcon />} onClick={handleNext}>
-                        Continue
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                      <Button
+                        variant="outlined"
+                        onClick={requestStartOver}
+                        startIcon={<AutorenewRoundedIcon />}
+                      >
+                        Start over
                       </Button>
-                    )}
+                      {activeStep < STEP_LABELS.length - 1 && (
+                        <Button
+                          variant="contained"
+                          endIcon={<ArrowForwardRoundedIcon />}
+                          onClick={handleNext}
+                          disabled={!currentStepIsValid}
+                        >
+                          Continue
+                        </Button>
+                      )}
+                    </Stack>
                   </Stack>
                 </Stack>
               </Stack>
@@ -1820,6 +1999,21 @@ function App() {
           <Button onClick={discardDraft}>Start clean</Button>
           <Button variant="contained" onClick={restoreDraft}>
             Restore draft
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={startOverDialogOpen} onClose={() => setStartOverDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Start over?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            This clears the current split and restarts the flow from Step 1.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStartOverDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="primary" startIcon={<AutorenewRoundedIcon />} onClick={confirmStartOver}>
+            Start over
           </Button>
         </DialogActions>
       </Dialog>

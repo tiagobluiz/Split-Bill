@@ -1,13 +1,27 @@
 export type LlmProvider = "chatgpt" | "claude" | "gemini";
 
-const PROVIDER_URLS: Record<LlmProvider, string> = {
+const DESKTOP_PROVIDER_URLS: Record<LlmProvider, string> = {
   chatgpt: "https://chatgpt.com/",
   claude: "https://claude.ai/",
   gemini: "https://gemini.google.com/app"
 };
 
-export function getReceiptLlmProviderUrl(provider: LlmProvider) {
-  return PROVIDER_URLS[provider];
+const MOBILE_PROVIDER_URLS: Record<LlmProvider, string> = {
+  chatgpt: "https://chatgpt.com/",
+  claude: "https://claude.ai/",
+  gemini: "https://gemini.google.com/"
+};
+
+export function isMobileUserAgent(userAgent: string) {
+  return /android|iphone|ipad|ipod|mobile/i.test(userAgent);
+}
+
+export function getReceiptLlmProviderUrl(provider: LlmProvider, isMobile = false) {
+  return isMobile ? MOBILE_PROVIDER_URLS[provider] : DESKTOP_PROVIDER_URLS[provider];
+}
+
+export function getReceiptLlmLaunchTarget(isMobile = false) {
+  return isMobile ? "_self" : "_blank";
 }
 
 export function buildReceiptLlmPrompt() {

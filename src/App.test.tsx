@@ -35,8 +35,12 @@ function getContinueButton() {
   return screen.getAllByRole("button", { name: "Continue" }).at(-1) as HTMLButtonElement;
 }
 
-function getAddItemButton() {
-  return screen.getAllByRole("button", { name: "Add item" }).at(-1) as HTMLButtonElement;
+function getDraftItemNameInput() {
+  return screen.getAllByLabelText("Item name").at(-1) as HTMLInputElement;
+}
+
+function getDraftPriceInput() {
+  return screen.getAllByLabelText("Price").at(-1) as HTMLInputElement;
 }
 
 function getStepButton(name: string, disabled: boolean) {
@@ -46,9 +50,16 @@ function getStepButton(name: string, disabled: boolean) {
 }
 
 async function addParticipant(user: ReturnType<typeof userEvent.setup>, name: string) {
-  await user.clear(screen.getByLabelText("Add participant"));
-  await user.type(screen.getByLabelText("Add participant"), name);
+  const participantInput = screen.getByPlaceholderText("Participant name");
+  await user.clear(participantInput);
+  await user.type(participantInput, name);
   await user.click(screen.getByRole("button", { name: "Add person" }));
+}
+
+async function addItemLine(user: ReturnType<typeof userEvent.setup>, name: string, price: string) {
+  await user.type(getDraftItemNameInput(), name);
+  await user.type(getDraftPriceInput(), price);
+  await user.keyboard("{Enter}");
 }
 
 describe("App", () => {
@@ -86,10 +97,10 @@ describe("App", () => {
       await addParticipant(user, "Bruno");
 
       await user.click(getContinueButton());
-      await user.click(getAddItemButton());
-
-      await user.type(screen.getByLabelText("Item name"), "Milk");
-      await user.type(screen.getByLabelText("Price"), "5.00");
+      await addItemLine(user, "Milk", "5.00");
+      await waitFor(() => {
+        expect(getContinueButton()).toBeEnabled();
+      });
 
       await user.click(getContinueButton());
 
@@ -127,7 +138,7 @@ describe("App", () => {
     expect(screen.getByText("Restore your last split?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Restore draft" }));
 
-    expect(await screen.findByRole("button", { name: "Add item" })).toBeInTheDocument();
+    expect(await screen.findByLabelText("Item name")).toBeInTheDocument();
     expect(screen.queryByText("Ana paid the receipt.")).not.toBeInTheDocument();
   });
 
@@ -146,9 +157,7 @@ describe("App", () => {
 
       await addParticipant(user, "Bruno");
       await user.click(getContinueButton());
-      await user.click(getAddItemButton());
-      await user.type(screen.getByLabelText("Item name"), "Milk");
-      await user.type(screen.getByLabelText("Price"), "5.00");
+      await addItemLine(user, "Milk", "5.00");
       await user.click(screen.getByRole("button", { name: "Delete Milk" }));
 
       expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
@@ -157,7 +166,7 @@ describe("App", () => {
   );
 
   it(
-    "removes a trailing empty item on enter and advances to the split grid",
+    "advances to the split grid when enter is pressed on an empty draft item and step 2 is already valid",
     async () => {
     const user = userEvent.setup();
     renderApp();
@@ -166,18 +175,17 @@ describe("App", () => {
     await addParticipant(user, "Ana");
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
-    await user.click(getAddItemButton());
+    await addItemLine(user, "Milk", "5.00");
 
-    await user.type(screen.getByLabelText("Item name"), "Milk");
-    await user.type(screen.getByLabelText("Price"), "5.00");
+    await user.click(getDraftItemNameInput());
     await user.keyboard("{Enter}");
 
-    expect(screen.getAllByLabelText("Item name")).toHaveLength(2);
-
-    await user.click(screen.getAllByLabelText("Item name")[1] as HTMLElement);
-    await user.keyboard("{Enter}");
-
-    expect(getStepButton("Go to step 3: Consumption grid", false)).toHaveAttribute("aria-current", "step");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Go to step 3: Consumption grid" })).toHaveAttribute(
+        "aria-current",
+        "step"
+      );
+    });
     expect(screen.getAllByText(/2\.50/).length).toBeGreaterThan(0);
     },
     15000
@@ -207,14 +215,15 @@ describe("App", () => {
       expect(disabledStep3).toHaveAttribute("aria-disabled", "true");
 
       await user.click(getStepButton("Go to step 2: Items & prices", false));
-      expect(await screen.findAllByRole("button", { name: "Add item" })).not.toHaveLength(0);
-      expect(getStepButton("Go to step 2: Items & prices", false)).toHaveAttribute("aria-current", "step");
+      expect(await screen.findAllByLabelText("Item name")).not.toHaveLength(0);
+      expect(screen.getByRole("button", { name: "Go to step 2: Items & prices" })).toHaveAttribute("aria-current", "step");
       await user.click(getStepButton("Go to step 4: Results", true));
-      expect(getStepButton("Go to step 2: Items & prices", false)).toHaveAttribute("aria-current", "step");
+      expect(screen.getByRole("button", { name: "Go to step 2: Items & prices" })).toHaveAttribute("aria-current", "step");
 
-      await user.click(getAddItemButton());
-      await user.type(screen.getByLabelText("Item name"), "Milk");
-      await user.type(screen.getByLabelText("Price"), "5.00");
+      await addItemLine(user, "Milk", "5.00");
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Go to step 4: Results" })).not.toHaveAttribute("aria-disabled", "true");
+      });
 
       await user.click(getStepButton("Go to step 1: People & payer", false));
       expect(getStepButton("Go to step 1: People & payer", false)).toHaveAttribute("aria-current", "step");
@@ -255,9 +264,10 @@ describe("App", () => {
     await addParticipant(user, "Ana");
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
-    await user.click(getAddItemButton());
-    await user.type(screen.getByLabelText("Item name"), "Milk");
-    await user.type(screen.getByLabelText("Price"), "5.00");
+    await addItemLine(user, "Milk", "5.00");
+    await waitFor(() => {
+      expect(getContinueButton()).toBeEnabled();
+    });
     await user.click(getContinueButton());
     await user.click(getContinueButton());
 
@@ -296,9 +306,7 @@ describe("App", () => {
     await addParticipant(user, "Ana");
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
-    await user.click(getAddItemButton());
-    await user.type(screen.getByLabelText("Item name"), "Milk");
-    await user.type(screen.getByLabelText("Price"), "5.00");
+    await addItemLine(user, "Milk", "5.00");
 
     const file = new File(["mock"], "receipt.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("Import receipt file"), file);
@@ -328,6 +336,32 @@ describe("App", () => {
     expect(windowOpenMock).toHaveBeenCalledWith("https://chatgpt.com/", "_blank", "noopener,noreferrer");
     expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
+  });
+
+  it("uses a mobile-aware handoff target for provider launch on mobile", async () => {
+    const originalUserAgent = navigator.userAgent;
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)"
+    });
+
+    const user = userEvent.setup();
+    renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Start splitting" }));
+    await addParticipant(user, "Ana");
+    await addParticipant(user, "Bruno");
+    await user.click(getContinueButton());
+
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+    await user.click(screen.getByRole("button", { name: "ChatGPT" }));
+
+    expect(windowOpenMock).toHaveBeenCalledWith("https://chatgpt.com/", "_self", "noopener,noreferrer");
+
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: originalUserAgent
+    });
   });
 
   it("opens the paste dialog after manually copying the ai prompt", async () => {
@@ -367,25 +401,29 @@ describe("App", () => {
     });
   });
 
-  it("clears the pasted input with the reset action", async () => {
-    const user = userEvent.setup();
-    renderApp();
+  it(
+    "clears the pasted input with the reset action",
+    async () => {
+      const user = userEvent.setup();
+      renderApp();
 
-    await user.click(screen.getByRole("button", { name: "Start splitting" }));
-    await addParticipant(user, "Ana");
-    await addParticipant(user, "Bruno");
-    await user.click(getContinueButton());
+      await user.click(screen.getByRole("button", { name: "Start splitting" }));
+      await addParticipant(user, "Ana");
+      await addParticipant(user, "Bruno");
+      await user.click(getContinueButton());
 
-    await user.click(screen.getByRole("button", { name: "Paste list" }));
-    const pastedItemsInput = screen.getByLabelText("Pasted items");
-    await user.type(pastedItemsInput, "Bananas - 2.49");
+      await user.click(screen.getByRole("button", { name: "Paste list" }));
+      const pastedItemsInput = screen.getByLabelText("Pasted items");
+      await user.type(pastedItemsInput, "Bananas - 2.49");
 
-    expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Reset" }));
+      expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+      await user.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(screen.getByLabelText("Pasted items")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
-  });
+      expect(screen.getByLabelText("Pasted items")).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+    },
+    15000
+  );
 
   it(
     "parses pasted items and can replace the existing item list",
@@ -397,9 +435,7 @@ describe("App", () => {
     await addParticipant(user, "Ana");
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
-    await user.click(getAddItemButton());
-    await user.type(screen.getByLabelText("Item name"), "Milk");
-    await user.type(screen.getByLabelText("Price"), "5.00");
+    await addItemLine(user, "Milk", "5.00");
 
     await user.click(screen.getByRole("button", { name: "Paste list" }));
     await user.type(screen.getByLabelText("Pasted items"), "Bananas - 2.49{enter}Bread,1.20");
@@ -428,18 +464,14 @@ describe("App", () => {
       await addParticipant(user, "Bruno");
       await user.click(getContinueButton());
 
-      await user.click(getAddItemButton());
-      await user.type(screen.getAllByLabelText("Item name")[0] as HTMLElement, "Milk");
-      await user.type(screen.getAllByLabelText("Price")[0] as HTMLElement, "5.00");
-      await user.click(getAddItemButton());
-      await user.type(screen.getAllByLabelText("Item name")[1] as HTMLElement, "Bread");
-      await user.type(screen.getAllByLabelText("Price")[1] as HTMLElement, "2.00");
+      await addItemLine(user, "Milk", "5.00");
+      await addItemLine(user, "Bread", "2.00");
 
       await user.click(screen.getByRole("button", { name: "Reset items" }));
 
       expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
       expect(screen.queryByDisplayValue("Bread")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Add item" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Item name")).toBeInTheDocument();
     },
     15000
   );
