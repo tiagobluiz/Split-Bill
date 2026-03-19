@@ -90,15 +90,6 @@ export const appTheme = createTheme({
         }
       }
     },
-    MuiToggleButtonGroup: {
-      styleOverrides: {
-        grouped: {
-          borderRadius: 12,
-          textTransform: "none",
-          fontWeight: 700
-        }
-      }
-    },
     MuiAlert: {
       styleOverrides: {
         root: {

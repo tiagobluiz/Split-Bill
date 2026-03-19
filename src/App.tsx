@@ -2,18 +2,20 @@ import DragIndicatorRoundedIcon from "@mui/icons-material/DragIndicatorRounded";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import CallSplitRoundedIcon from "@mui/icons-material/CallSplitRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
 import ContentPasteRoundedIcon from "@mui/icons-material/ContentPasteRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
+import Inventory2RoundedIcon from "@mui/icons-material/Inventory2Rounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import KeyboardArrowUpRoundedIcon from "@mui/icons-material/KeyboardArrowUpRounded";
+import LooksOneRoundedIcon from "@mui/icons-material/LooksOneRounded";
 import PaidRoundedIcon from "@mui/icons-material/PaidRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import PictureAsPdfRoundedIcon from "@mui/icons-material/PictureAsPdfRounded";
 import PsychologyAltRoundedIcon from "@mui/icons-material/PsychologyAltRounded";
-import RemoveCircleOutlineRoundedIcon from "@mui/icons-material/RemoveCircleOutlineRounded";
 import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import SettingsRoundedIcon from "@mui/icons-material/SettingsRounded";
 import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
@@ -34,6 +36,11 @@ import {
   verticalListSortingStrategy
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import JoyStep from "@mui/joy/Step";
+import JoyStepButton from "@mui/joy/StepButton";
+import JoyStepIndicator from "@mui/joy/StepIndicator";
+import JoyStepper from "@mui/joy/Stepper";
+import { CssVarsProvider as JoyCssVarsProvider } from "@mui/joy/styles";
 import {
   Alert,
   alpha,
@@ -47,11 +54,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControlLabel,
   Grid,
   IconButton,
   InputAdornment,
-  LinearProgress,
   MenuItem,
   Radio,
   RadioGroup,
@@ -115,6 +122,45 @@ const STEP_LABELS = [
   "Split",
   "Balances"
 ] as const;
+
+const STEP_ICONS = [
+  PersonRoundedIcon,
+  Inventory2RoundedIcon,
+  CallSplitRoundedIcon,
+  PaidRoundedIcon
+] as const;
+
+function comparePeopleByDisplayOrder<T extends { name: string; isPayer: boolean }>(left: T, right: T) {
+  if (left.isPayer !== right.isPayer) {
+    return left.isPayer ? -1 : 1;
+  }
+
+  return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+}
+
+function parseAllocationNumber(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isEqualSplitAcrossEveryone(item: SplitFormValues["items"][number], participantCount: number) {
+  if (participantCount <= 0 || item.allocations.length !== participantCount) {
+    return false;
+  }
+
+  if (item.splitMode === "even") {
+    return item.allocations.every((allocation) => allocation.evenIncluded);
+  }
+
+  if (item.splitMode === "shares") {
+    return item.allocations.every((allocation) => Math.abs(parseAllocationNumber(allocation.shares) - 1) < 0.001);
+  }
+
+  const expectedPercent = 100 / participantCount;
+  return item.allocations.every(
+    (allocation) => Math.abs(parseAllocationNumber(allocation.percent) - expectedPercent) < 0.001
+  );
+}
 
 const CURRENCY_OPTIONS = [
   { code: "EUR", label: "Euro (€)" },
@@ -371,15 +417,6 @@ function App() {
       return;
     }
 
-    if (activeStep === 1) {
-      const currentValues = getValues();
-      const normalizedValues = stripTrailingEmptyItemDraft(currentValues);
-
-      if (normalizedValues.items.length !== currentValues.items.length) {
-        reset(normalizedValues);
-      }
-    }
-
     const nextStep = Math.min(activeStep + 1, STEP_LABELS.length - 1);
     if (nextStep >= 2) {
       setHasUnlockedFullNavigation(true);
@@ -419,15 +456,6 @@ function App() {
   function handleStepNavigation(targetStep: number) {
     if (!canNavigateToStep(targetStep)) {
       return;
-    }
-
-    if (activeStep === 1 && targetStep >= 2) {
-      const currentValues = getValues();
-      const normalizedValues = stripTrailingEmptyItemDraft(currentValues);
-
-      if (normalizedValues.items.length !== currentValues.items.length) {
-        reset(normalizedValues);
-      }
     }
 
     if (targetStep >= 2) {
@@ -675,6 +703,41 @@ function App() {
     setItemAllocations(itemIndex, nextAllocations);
   }
 
+  function setExclusiveAllocation(itemIndex: number, allocationIndex: number, participantId: string) {
+    const item = getValues(`items.${itemIndex}`);
+    const currentAllocations = item.allocations as AllocationFormValue[];
+
+    if (item.splitMode === "even") {
+      setItemAllocations(
+        itemIndex,
+        currentAllocations.map((allocation, currentIndex) => ({
+          ...allocation,
+          evenIncluded: currentIndex === allocationIndex
+        }))
+      );
+      return;
+    }
+
+    if (item.splitMode === "shares") {
+      setItemAllocations(
+        itemIndex,
+        currentAllocations.map((allocation, currentIndex) => ({
+          ...allocation,
+          shares: currentIndex === allocationIndex ? "1" : "0"
+        }))
+      );
+      return;
+    }
+
+    setItemAllocations(
+      itemIndex,
+      currentAllocations.map((allocation) => ({
+        ...allocation,
+        percent: allocation.participantId === participantId ? "100" : "0"
+      }))
+    );
+  }
+
   function formatEditableNumber(value: number) {
     if (Number.isInteger(value)) {
       return String(value);
@@ -705,6 +768,14 @@ function App() {
 
   function zeroShareValue(itemIndex: number, allocationIndex: number) {
     updateShareValue(itemIndex, allocationIndex, "0");
+  }
+
+  function resetEvenValues(itemIndex: number) {
+    const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+    setItemAllocations(
+      itemIndex,
+      currentAllocations.map((allocation) => ({ ...allocation, evenIncluded: true }))
+    );
   }
 
   function resetShareValues(itemIndex: number) {
@@ -791,9 +862,11 @@ function App() {
       return;
     }
 
+    const orderedPeople = [...settlement.data.people].sort(comparePeopleByDisplayOrder);
+
     const summary = [
       "Split Bill summary",
-      ...settlement.data.people.map(
+      ...orderedPeople.map(
         (person) => {
           if (person.isPayer) {
             return `${person.name}: paid ${formatMoney(person.paidCents, settlement.data.currency)} and should get back ${formatMoney(person.netCents, settlement.data.currency)}.`;
@@ -1014,8 +1087,8 @@ function App() {
           <Card id="splitter-wizard">
             <CardContent sx={{ p: { xs: 2.5, md: 4 } }}>
               <Stack spacing={3}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between">
-                  <Box>
+                <Stack direction="row" spacing={2} justifyContent="space-between" alignItems="flex-start">
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
                     <Typography variant="h2">Receipt splitter</Typography>
                     <Typography color="text.secondary">
                       {STEP_SUMMARIES[activeStep]}
@@ -1025,94 +1098,172 @@ function App() {
                     <IconButton
                       aria-label="Open receipt settings"
                       onClick={() => setSettingsDialogOpen(true)}
-                      sx={{ alignSelf: { xs: "flex-start", md: "flex-start" } }}
+                      sx={{ flexShrink: 0 }}
                     >
                       <SettingsRoundedIcon />
                     </IconButton>
                   </Tooltip>
                 </Stack>
 
-                <Grid container spacing={1.5}>
-                  {STEP_LABELS.map((label, index) => {
-                    const completed = activeStep > index;
-                    const current = activeStep === index;
-
-                    return (
-                      <Grid size={{ xs: 12, sm: 6, md: 3 }} key={label}>
-                        <Box
-                          role="button"
-                          aria-label={`Go to step ${index + 1}: ${label}`}
-                          aria-current={current ? "step" : undefined}
-                          tabIndex={canNavigateToStep(index) ? 0 : -1}
-                          aria-disabled={!canNavigateToStep(index)}
-                          onClick={() => handleStepNavigation(index)}
-                          onKeyDown={(event) => {
-                            if (!canNavigateToStep(index)) {
-                              return;
-                            }
-
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              handleStepNavigation(index);
-                            }
-                          }}
-                          sx={{
-                            p: 2,
-                            minHeight: 92,
-                            borderRadius: `${SURFACE_RADIUS}px`,
-                            border: "1px solid",
-                            borderColor: current
-                              ? "primary.main"
-                              : completed
-                                ? alpha("#0F766E", 0.3)
-                                : alpha("#1D1D1F", 0.08),
-                            bgcolor: current
-                              ? alpha("#EF5B3C", 0.08)
-                              : completed
-                                ? alpha("#0F766E", 0.08)
-                                : alpha("#FFFFFF", 0.72),
-                            cursor: canNavigateToStep(index) ? "pointer" : "not-allowed",
-                            opacity: canNavigateToStep(index) ? 1 : 0.55,
-                            display: "grid",
-                            alignContent: "space-between",
-                            transition:
-                              "border-color 120ms ease, background-color 120ms ease, opacity 120ms ease, transform 120ms ease",
-                            "&:hover": canNavigateToStep(index)
-                              ? {
-                                  borderColor: current ? "primary.main" : alpha("#EF5B3C", 0.28),
-                                  bgcolor: current ? alpha("#EF5B3C", 0.1) : alpha("#EF5B3C", 0.04),
-                                  transform: "translateY(-1px)"
-                                }
-                              : undefined,
-                            "&:focus-visible": {
-                              outline: "2px solid",
-                              outlineColor: alpha("#EF5B3C", 0.45),
-                              outlineOffset: 2
-                            }
-                          }}
-                        >
-                          <Typography variant="body2" color="text.secondary">
-                            Step {index + 1}
-                          </Typography>
-                          <Typography fontWeight={800}>{label}</Typography>
-                        </Box>
-                      </Grid>
-                    );
-                  })}
-                </Grid>
-
-                <LinearProgress
-                  variant="determinate"
-                  value={((activeStep + 1) / STEP_LABELS.length) * 100}
+                <Box
                   sx={{
-                    height: 10,
-                    borderRadius: 999,
-                    bgcolor: alpha("#EF5B3C", 0.08),
-                    "& .MuiLinearProgress-bar": {
-                      borderRadius: 999
-                    }
+                    display: { xs: "flex", md: "none" },
+                    flexDirection: "column",
+                    gap: 1.25,
+                    px: 0.5,
+                    pb: 1.5
                   }}
-                />
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1.25}
+                    alignItems="center"
+                    sx={{
+                      p: 1.25,
+                      borderRadius: `${SURFACE_RADIUS}px`,
+                      border: "1px solid",
+                      borderColor: alpha("#1D1D1F", 0.08),
+                      bgcolor: alpha("#FFFFFF", 0.82)
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 999,
+                        display: "grid",
+                        placeItems: "center",
+                        border: "1px solid",
+                        borderColor: alpha("#EF5B3C", 0.3),
+                        bgcolor: alpha("#EF5B3C", 0.12),
+                        color: "primary.main",
+                        flexShrink: 0
+                      }}
+                    >
+                      {(() => {
+                        const ActiveIcon = STEP_ICONS[activeStep];
+                        return <ActiveIcon fontSize="small" />;
+                      })()}
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        Step {activeStep + 1} of {STEP_LABELS.length}
+                      </Typography>
+                      <Typography fontWeight={800}>{STEP_LABELS[activeStep]}</Typography>
+                    </Box>
+                  </Stack>
+                  <Box
+                    sx={{
+                      height: 4,
+                      borderRadius: 999,
+                      bgcolor: alpha("#1D1D1F", 0.08),
+                      overflow: "hidden"
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: `${((activeStep + 1) / STEP_LABELS.length) * 100}%`,
+                        height: "100%",
+                        borderRadius: 999,
+                        bgcolor: "primary.main",
+                        transition: "width 180ms ease"
+                      }}
+                    />
+                  </Box>
+                </Box>
+
+                <Box sx={{ display: { xs: "none", md: "block" } }}>
+                  <JoyCssVarsProvider>
+                    <JoyStepper
+                      sx={{
+                        "--Stepper-horizontalGap": "1rem",
+                        "--StepIndicator-size": "44px",
+                        "--Step-gap": "0.625rem",
+                        "--Step-connectorInset": "calc(var(--StepIndicator-size) / 2)",
+                        "--Step-connectorThickness": "2px",
+                        "--Step-connectorRadius": "999px",
+                        "--Step-connectorBg": alpha("#1D1D1F", 0.12),
+                        px: 1,
+                        pb: 2.5
+                      }}
+                    >
+                      {STEP_LABELS.map((label, index) => {
+                        const completed = activeStep > index;
+                        const current = activeStep === index;
+                        const Icon = STEP_ICONS[index];
+                        const navigable = canNavigateToStep(index);
+
+                        return (
+                          <JoyStep
+                            key={label}
+                            active={current}
+                            completed={completed}
+                            disabled={!navigable}
+                            indicator={
+                              <JoyStepIndicator
+                                variant={current ? "soft" : completed ? "soft" : "outlined"}
+                                color={current ? "danger" : completed ? "success" : "neutral"}
+                                sx={{
+                                  borderColor: current
+                                    ? alpha("#EF5B3C", 0.32)
+                                    : completed
+                                      ? alpha("#0F766E", 0.28)
+                                      : alpha("#1D1D1F", 0.12),
+                                  bgcolor: current
+                                    ? alpha("#EF5B3C", 0.12)
+                                    : completed
+                                      ? alpha("#0F766E", 0.08)
+                                      : alpha("#FFFFFF", 0.9),
+                                  color: current ? "#EF5B3C" : completed ? "#0F766E" : "text.secondary",
+                                  transition:
+                                    "transform 140ms ease, box-shadow 140ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease"
+                                }}
+                              >
+                                <Icon fontSize="small" />
+                              </JoyStepIndicator>
+                            }
+                            sx={{
+                              alignItems: "center",
+                              "&:has(button:hover) .MuiStepIndicator-root": navigable
+                                ? {
+                                    transform: "translateY(-1px) scale(1.05)",
+                                    boxShadow: `0 10px 22px ${alpha("#1D1D1F", 0.1)}`
+                                  }
+                                : undefined
+                            }}
+                          >
+                            <JoyStepButton
+                              aria-label={`Go to step ${index + 1}: ${label}`}
+                              aria-current={current ? "step" : undefined}
+                              disabled={!navigable}
+                              onClick={() => handleStepNavigation(index)}
+                              sx={{
+                                borderRadius: `${INNER_RADIUS}px`,
+                                p: 0,
+                                backgroundColor: "transparent",
+                                textAlign: "center",
+                                fontSize: "0.92rem",
+                                lineHeight: 1.2,
+                                fontWeight: current ? 800 : 700,
+                                color: navigable ? "text.primary" : "text.disabled",
+                                transition: "transform 140ms ease, color 120ms ease, opacity 120ms ease",
+                                opacity: navigable ? 1 : 0.5,
+                                "&:hover": navigable
+                                  ? {
+                                      backgroundColor: "transparent",
+                                      transform: "translateY(-1px)"
+                                    }
+                                  : undefined
+                              }}
+                            >
+                              {label}
+                            </JoyStepButton>
+                          </JoyStep>
+                        );
+                      })}
+                    </JoyStepper>
+                  </JoyCssVarsProvider>
+                </Box>
 
                 {activeStep === 0 && (
                   <Stack spacing={3}>
@@ -1203,10 +1354,11 @@ function App() {
                           variant="outlined"
                           sx={{
                             borderRadius: `${SURFACE_RADIUS}px`,
-                            borderColor: alpha("#1D1D1F", 0.08),
-                            borderStyle: "solid",
+                            borderColor: alpha("#0F766E", 0.18),
+                            borderStyle: "dashed",
                             borderWidth: 1,
-                            bgcolor: "background.paper"
+                            bgcolor: alpha("#0F766E", 0.025),
+                            boxShadow: "0 14px 34px rgba(31, 23, 15, 0.05)"
                           }}
                         >
                           <CardContent sx={{ p: { xs: 2, md: 2.25 } }}>
@@ -1475,16 +1627,9 @@ function App() {
 
                 {activeStep === 2 && (
                   <Stack spacing={2.25}>
-                    <Card
-                      variant="outlined"
-                      sx={{ borderRadius: `${SURFACE_RADIUS}px`, borderColor: alpha("#1D1D1F", 0.08), bgcolor: alpha("#FFFFFF", 0.76) }}
-                    >
-                      <CardContent sx={{ py: 1.5 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          Item previews are provisional. Final leftover cents are balanced in the results step.
-                        </Typography>
-                      </CardContent>
-                    </Card>
+                    <Alert severity="info">
+                      These amounts are a preview. Final cents are settled in Balances.
+                    </Alert>
                     <DndContext
                       sensors={sensors}
                       collisionDetection={closestCenter}
@@ -1510,6 +1655,7 @@ function App() {
                               typeof errors.items?.[itemIndex]?.allocations?.message === "string"
                                 ? errors.items[itemIndex]?.allocations?.message
                                 : undefined;
+                            const canResetItem = !isEqualSplitAcrossEveryone(item, participants.length);
 
                             return (
                               <SortableCard
@@ -1551,6 +1697,10 @@ function App() {
                                         color="inherit"
                                         startIcon={<RestartAltRoundedIcon />}
                                         onClick={() => {
+                                          if (item.splitMode === "even") {
+                                            resetEvenValues(itemIndex);
+                                          }
+
                                           if (item.splitMode === "shares") {
                                             resetShareValues(itemIndex);
                                           }
@@ -1559,9 +1709,9 @@ function App() {
                                             resetPercentValues(itemIndex);
                                           }
                                         }}
-                                        disabled={item.splitMode === "even"}
+                                        disabled={!canResetItem}
                                       >
-                                        Reset row
+                                        Reset item
                                       </Button>
                                       <ToggleButtonGroup
                                         exclusive
@@ -1576,8 +1726,8 @@ function App() {
                                         sx={{
                                           alignSelf: { xs: "stretch", md: "center" },
                                           "& .MuiToggleButton-root": {
-                                            minHeight: 40,
-                                            minWidth: 84,
+                                            minHeight: 32,
+                                            minWidth: 82,
                                             px: 1.5,
                                             textTransform: "none",
                                             fontWeight: 700
@@ -1614,14 +1764,15 @@ function App() {
                                             >
                                               <CardContent
                                                 sx={{
-                                                  p: 1.6,
+                                                  px: 1.5,
+                                                  py: 1.35,
                                                   height: "100%",
                                                   display: "grid",
-                                                  gridTemplateRows: "auto auto 48px",
-                                                  rowGap: 1
+                                                  gridTemplateRows: "auto 1fr",
+                                                  rowGap: 0.75
                                                 }}
                                               >
-                                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
                                                   <Typography fontWeight={800} fontSize="0.98rem">
                                                     {participant.name}
                                                   </Typography>
@@ -1633,44 +1784,20 @@ function App() {
                                                   </Typography>
                                                 </Stack>
 
-                                                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                                  <Typography variant="body2" color="text.secondary">
-                                                    {item.splitMode === "even"
-                                                      ? "Even split"
-                                                      : item.splitMode === "shares"
-                                                        ? "Share units"
-                                                        : "Percent"}
-                                                  </Typography>
-                                                  {item.splitMode !== "even" ? (
-                                                    <Button
-                                                      size="small"
-                                                      color="inherit"
-                                                      startIcon={<RemoveCircleOutlineRoundedIcon />}
-                                                      onClick={() =>
-                                                        item.splitMode === "shares"
-                                                          ? zeroShareValue(itemIndex, allocationIndex)
-                                                          : zeroPercentValue(itemIndex, participant.id)
-                                                      }
-                                                      sx={{
-                                                        minWidth: 0,
-                                                        px: 0.75,
-                                                        color: "text.secondary"
-                                                      }}
-                                                    >
-                                                      0
-                                                    </Button>
-                                                  ) : (
-                                                    <Box sx={{ width: 34, height: 24, flexShrink: 0 }} />
-                                                  )}
-                                                </Stack>
-
-                                                <Box sx={{ height: 40, display: "flex", alignItems: "stretch" }}>
+                                                <Box
+                                                  sx={{
+                                                    minHeight: 52,
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    pt: 0.5
+                                                  }}
+                                                >
                                                   {item.splitMode === "even" && allocation && (
                                                     <ButtonBase
                                                       onClick={() => toggleEvenAllocation(itemIndex, allocationIndex)}
                                                       sx={{
                                                         width: "100%",
-                                                        minHeight: 48,
+                                                        height: 48,
                                                         justifyContent: "space-between",
                                                         gap: 1,
                                                         borderRadius: `${INNER_RADIUS}px`,
@@ -1693,65 +1820,162 @@ function App() {
                                                           {allocation.evenIncluded ? "Included" : "Excluded"}
                                                         </Typography>
                                                       </Stack>
-                                                      <Typography variant="body2" color="text.secondary">
-                                                        {allocation.evenIncluded ? "Counts toward split" : "Ignored"}
-                                                      </Typography>
+                                                      <Stack direction="row" spacing={0.25} alignItems="center">
+                                                        <Divider
+                                                          orientation="vertical"
+                                                          flexItem
+                                                          sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.18) }}
+                                                        />
+                                                        <IconButton
+                                                          aria-label={`Only ${participant.name} for this item`}
+                                                          onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setExclusiveAllocation(
+                                                              itemIndex,
+                                                              allocationIndex,
+                                                              participant.id
+                                                            );
+                                                          }}
+                                                          size="small"
+                                                          sx={{ color: "text.secondary" }}
+                                                        >
+                                                          <LooksOneRoundedIcon fontSize="small" />
+                                                        </IconButton>
+                                                      </Stack>
                                                     </ButtonBase>
                                                   )}
 
                                                   {item.splitMode === "shares" && allocation && (
-                                                    <TextField
-                                                      label="Share units"
-                                                      fullWidth
-                                                      size="small"
-                                                      type="number"
-                                                      value={allocation.shares}
-                                                      onChange={(event) =>
-                                                        updateShareValue(itemIndex, allocationIndex, event.target.value)
-                                                      }
-                                                      onKeyDown={(event) => {
-                                                        if (event.key === "ArrowUp") {
-                                                          event.preventDefault();
-                                                          nudgeShareValue(itemIndex, allocationIndex, 1);
+                                                    <Box sx={{ width: "100%" }}>
+                                                      <TextField
+                                                        label="Share units"
+                                                        fullWidth
+                                                        size="small"
+                                                        type="number"
+                                                        value={allocation.shares}
+                                                        onChange={(event) =>
+                                                          updateShareValue(itemIndex, allocationIndex, event.target.value)
                                                         }
+                                                        onKeyDown={(event) => {
+                                                          if (event.key === "ArrowUp") {
+                                                            event.preventDefault();
+                                                            nudgeShareValue(itemIndex, allocationIndex, 1);
+                                                          }
 
-                                                        if (event.key === "ArrowDown") {
-                                                          event.preventDefault();
-                                                          nudgeShareValue(itemIndex, allocationIndex, -1);
-                                                        }
-                                                      }}
-                                                      inputProps={{ min: 0, step: 1 }}
-                                                      sx={{ "& .MuiInputBase-root": { height: 48 } }}
-                                                    />
+                                                          if (event.key === "ArrowDown") {
+                                                            event.preventDefault();
+                                                            nudgeShareValue(itemIndex, allocationIndex, -1);
+                                                          }
+                                                        }}
+                                                        inputProps={{ min: 0, step: 1 }}
+                                                        InputProps={{
+                                                          endAdornment: (
+                                                            <InputAdornment position="end">
+                                                              <Stack direction="row" spacing={0.25} alignItems="center">
+                                                                <Divider
+                                                                  orientation="vertical"
+                                                                  flexItem
+                                                                  sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.12) }}
+                                                                />
+                                                                <IconButton
+                                                                  aria-label={`Only ${participant.name} for this item`}
+                                                                  onClick={() =>
+                                                                    setExclusiveAllocation(
+                                                                      itemIndex,
+                                                                      allocationIndex,
+                                                                      participant.id
+                                                                    )
+                                                                  }
+                                                                  edge="end"
+                                                                  size="small"
+                                                                  sx={{ color: "text.secondary" }}
+                                                                >
+                                                                  <LooksOneRoundedIcon fontSize="small" />
+                                                                </IconButton>
+                                                                <IconButton
+                                                                  aria-label={`Exclude ${participant.name} from this item`}
+                                                                  onClick={() => zeroShareValue(itemIndex, allocationIndex)}
+                                                                  edge="end"
+                                                                  size="small"
+                                                                  sx={{ color: "text.secondary" }}
+                                                                >
+                                                                  <CloseRoundedIcon fontSize="small" />
+                                                                </IconButton>
+                                                              </Stack>
+                                                            </InputAdornment>
+                                                          )
+                                                        }}
+                                                        sx={{ "& .MuiInputBase-root": { height: 48 } }}
+                                                      />
+                                                    </Box>
                                                   )}
 
                                                   {item.splitMode === "percent" && allocation && (
-                                                    <TextField
-                                                      label="Percent"
-                                                      fullWidth
-                                                      size="small"
-                                                      type="number"
-                                                      value={allocation.percent}
-                                                      onChange={(event) =>
-                                                        updatePercentValue(itemIndex, participant.id, event.target.value)
-                                                      }
-                                                      onKeyDown={(event) => {
-                                                        if (event.key === "ArrowUp") {
-                                                          event.preventDefault();
-                                                          nudgePercentValue(itemIndex, participant.id, 1);
+                                                    <Box sx={{ width: "100%" }}>
+                                                      <TextField
+                                                        label="Percent"
+                                                        fullWidth
+                                                        size="small"
+                                                        type="number"
+                                                        value={allocation.percent}
+                                                        onChange={(event) =>
+                                                          updatePercentValue(itemIndex, participant.id, event.target.value)
                                                         }
+                                                        onKeyDown={(event) => {
+                                                          if (event.key === "ArrowUp") {
+                                                            event.preventDefault();
+                                                            nudgePercentValue(itemIndex, participant.id, 1);
+                                                          }
 
-                                                        if (event.key === "ArrowDown") {
-                                                          event.preventDefault();
-                                                          nudgePercentValue(itemIndex, participant.id, -1);
-                                                        }
-                                                      }}
-                                                      inputProps={{ min: 0, max: 100, step: 0.01 }}
-                                                      InputProps={{
-                                                        endAdornment: <InputAdornment position="end">%</InputAdornment>
-                                                      }}
-                                                      sx={{ "& .MuiInputBase-root": { height: 48 } }}
-                                                    />
+                                                          if (event.key === "ArrowDown") {
+                                                            event.preventDefault();
+                                                            nudgePercentValue(itemIndex, participant.id, -1);
+                                                          }
+                                                        }}
+                                                        inputProps={{ min: 0, max: 100, step: 0.01 }}
+                                                        InputProps={{
+                                                          startAdornment: (
+                                                            <InputAdornment position="start">%</InputAdornment>
+                                                          ),
+                                                          endAdornment: (
+                                                            <InputAdornment position="end">
+                                                              <Stack direction="row" spacing={0.25} alignItems="center">
+                                                                <Divider
+                                                                  orientation="vertical"
+                                                                  flexItem
+                                                                  sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.12) }}
+                                                                />
+                                                                <IconButton
+                                                                  aria-label={`Only ${participant.name} for this item`}
+                                                                  onClick={() =>
+                                                                    setExclusiveAllocation(
+                                                                      itemIndex,
+                                                                      allocationIndex,
+                                                                      participant.id
+                                                                    )
+                                                                  }
+                                                                  edge="end"
+                                                                  size="small"
+                                                                  sx={{ color: "text.secondary" }}
+                                                                >
+                                                                  <LooksOneRoundedIcon fontSize="small" />
+                                                                </IconButton>
+                                                                <IconButton
+                                                                  aria-label={`Exclude ${participant.name} from this item`}
+                                                                  onClick={() => zeroPercentValue(itemIndex, participant.id)}
+                                                                  edge="end"
+                                                                  size="small"
+                                                                  sx={{ color: "text.secondary" }}
+                                                                >
+                                                                  <CloseRoundedIcon fontSize="small" />
+                                                                </IconButton>
+                                                              </Stack>
+                                                            </InputAdornment>
+                                                          )
+                                                        }}
+                                                        sx={{ "& .MuiInputBase-root": { height: 48 } }}
+                                                      />
+                                                    </Box>
                                                   )}
                                                 </Box>
                                               </CardContent>
@@ -1797,21 +2021,18 @@ function App() {
                           onClick={exportSummaryPdf}
                           disabled={exportPdfPending}
                         >
-                          {exportPdfPending ? "Exporting PDF..." : "Export PDF"}
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          startIcon={<AutorenewRoundedIcon />}
-                          onClick={startOver}
-                        >
-                          Start over
+                          {exportPdfPending ? "Exporting PDF..." : "Export to PDF"}
                         </Button>
                       </Stack>
                     </Stack>
 
                     {(() => {
                       const payer = settlement.data.people.find((person) => person.isPayer);
-                      const payees = settlement.data.people.filter((person) => !person.isPayer);
+                      const payees = [...settlement.data.people]
+                        .filter((person) => !person.isPayer)
+                        .sort((left, right) =>
+                          left.name.localeCompare(right.name, undefined, { sensitivity: "base" })
+                        );
 
                       return (
                         <Grid container spacing={2}>
