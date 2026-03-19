@@ -91,6 +91,7 @@ import {
   formatMoneyTrailingSymbol,
   ITEM_AMOUNT_MAX_CENTS,
   ITEM_AMOUNT_TOO_HIGH_MESSAGE,
+  ITEM_NAME_MAX_LENGTH,
   parseMoneyToCents,
   PARTICIPANT_NAME_MAX_LENGTH,
   rebalancePercentAllocations,
@@ -316,12 +317,21 @@ function App() {
     keyName: "fieldKey"
   });
 
-  const watchedValues = useWatch({ control }) as SplitFormValues;
-  const deferredValues = useDeferredValue(watchedValues);
   const participants = (useWatch({ control, name: "participants" }) ?? []) as ParticipantFormValue[];
   const items = (useWatch({ control, name: "items" }) ?? []) as SplitFormValues["items"];
   const payerParticipantId = (useWatch({ control, name: "payerParticipantId" }) ?? "") as string;
   const currency = (useWatch({ control, name: "currency" }) ?? "EUR") as string;
+  const watchedValues = useMemo(
+    () =>
+      ({
+        participants,
+        items,
+        payerParticipantId,
+        currency
+      }) satisfies SplitFormValues,
+    [currency, items, participants, payerParticipantId]
+  );
+  const deferredValues = useDeferredValue(watchedValues);
 
   function stripTrailingEmptyItemDraft(values: SplitFormValues) {
     const nextItems = [...values.items];
@@ -347,11 +357,17 @@ function App() {
       return;
     }
 
-    storeDraft({
-      hasUnlockedFullNavigation,
-      step: activeStep,
-      values: watchedValues
-    });
+    const timeoutId = window.setTimeout(() => {
+      storeDraft({
+        hasUnlockedFullNavigation,
+        step: activeStep,
+        values: watchedValues
+      });
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [activeStep, hasUnlockedFullNavigation, showRestoreDialog, watchedValues]);
 
   useEffect(() => {
@@ -434,20 +450,20 @@ function App() {
   }
 
   function canNavigateToStep(targetStep: number) {
-    if (hasUnlockedFullNavigation) {
-      return true;
-    }
+    const currentValues = getValues();
+    const stepOneValid = validateStepOne(currentValues).length === 0;
+    const stepTwoValid = validateStepTwo(stripTrailingEmptyItemDraft(currentValues)).length === 0;
 
     if (targetStep === 0) {
       return true;
     }
 
     if (targetStep === 1) {
-      return validateStepOne(getValues()).length === 0;
+      return hasUnlockedFullNavigation || stepOneValid;
     }
 
-    if (targetStep >= 2 && activeStep >= 1) {
-      return validateStepTwo(stripTrailingEmptyItemDraft(getValues())).length === 0;
+    if (targetStep >= 2) {
+      return stepOneValid && stepTwoValid;
     }
 
     return false;
@@ -988,7 +1004,10 @@ function App() {
     () => stripTrailingEmptyItemDraft(deferredValues),
     [deferredValues]
   );
-  const settlement = computeSettlement(normalizedDeferredValues);
+  const settlement = useMemo(
+    () => (activeStep === 3 ? computeSettlement(normalizedDeferredValues) : null),
+    [activeStep, normalizedDeferredValues]
+  );
   const canAddParticipant = participantInput.trim().length > 0;
   const visibleStepThreeItems = useMemo(
     () =>
@@ -1026,14 +1045,14 @@ function App() {
     );
   }, [activeStep, currentStepIsValid, watchedValues]);
   const resultsStepErrors = useMemo(() => {
-    if (activeStep !== 3 || settlement.ok) {
+    if (activeStep !== 3 || !settlement || settlement.ok) {
       return [];
     }
 
     return Array.from(
       new Set(validateStepThree(normalizedWatchedValues).map((error) => error.message))
     );
-  }, [activeStep, normalizedWatchedValues, settlement.ok]);
+  }, [activeStep, normalizedWatchedValues, settlement]);
 
   return (
     <Box
@@ -1514,12 +1533,28 @@ function App() {
                         <Stack spacing={2}>
                           {items.map((item, index) => {
                             const parsedItemAmount = parseMoneyToCents(item.price);
-                            const itemNameMissingWithPrice =
-                              item.price.trim().length > 0 && parsedItemAmount !== null && !item.name.trim();
+                            const hasPriceInput = item.price.trim().length > 0;
+                            const itemNameMissingWithPrice = hasPriceInput && !item.name.trim();
+                            const itemNameTooLong =
+                              item.name.trim().length > ITEM_NAME_MAX_LENGTH
+                                ? `Keep item names under ${ITEM_NAME_MAX_LENGTH} characters.`
+                                : undefined;
                             const itemNameError =
+                              itemNameTooLong ??
                               (itemNameMissingWithPrice ? "This item needs a name." : undefined) ??
                               errors.items?.[index]?.name?.message;
-                            const itemPriceError = errors.items?.[index]?.price?.message;
+                            const itemPriceFormatError =
+                              hasPriceInput && parsedItemAmount === null
+                                ? "Use numbers only, with up to 2 decimals, for example 3.49."
+                                : undefined;
+                            const itemPriceZeroError =
+                              hasPriceInput && parsedItemAmount === 0
+                                ? "Amount must be different from zero."
+                                : undefined;
+                            const itemPriceError =
+                              itemPriceFormatError ??
+                              itemPriceZeroError ??
+                              errors.items?.[index]?.price?.message;
                             const itemPriceTooHigh =
                               parsedItemAmount !== null && Math.abs(parsedItemAmount) > ITEM_AMOUNT_MAX_CENTS;
 
@@ -1550,6 +1585,7 @@ function App() {
                                             handleItemSubmitFromEnter(index);
                                           }
                                         }}
+                                        inputProps={{ maxLength: ITEM_NAME_MAX_LENGTH }}
                                         sx={{
                                           "& .MuiInputAdornment-root": {
                                             color: "text.secondary",
@@ -1630,17 +1666,7 @@ function App() {
                     <Alert severity="info">
                       These amounts are a preview. Final cents are settled in Balances.
                     </Alert>
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      modifiers={[restrictToVerticalAxis]}
-                      onDragEnd={handleItemDragEnd}
-                    >
-                      <SortableContext
-                        items={visibleStepThreeItems.map(({ item }) => item.id)}
-                        strategy={verticalListSortingStrategy}
-                      >
-                        <Stack spacing={1.5}>
+                    <Stack spacing={1.5}>
                           {visibleStepThreeItems.map(({ item, index: itemIndex }) => {
                             const deferredItem =
                               deferredValues.items.find((entry) => entry.id === item.id) ?? item;
@@ -1658,88 +1684,134 @@ function App() {
                             const canResetItem = !isEqualSplitAcrossEveryone(item, participants.length);
 
                             return (
-                              <SortableCard
+                              <Card
                                 key={item.id}
-                                id={item.id}
-                                onMoveUp={() => reorderItems(itemIndex, itemIndex - 1)}
-                                onMoveDown={() => reorderItems(itemIndex, itemIndex + 1)}
-                                disableMoveUp={itemIndex === 0}
-                                disableMoveDown={
-                                  itemIndex ===
-                                  visibleStepThreeItems[visibleStepThreeItems.length - 1]?.index
-                                }
+                                variant="outlined"
+                                sx={{
+                                  overflow: "visible",
+                                  borderRadius: `${SURFACE_RADIUS}px`,
+                                  borderColor: alpha("#1D1D1F", 0.08),
+                                  bgcolor: "background.paper",
+                                  boxShadow: "0 14px 34px rgba(31, 23, 15, 0.05)"
+                                }}
                               >
+                                <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
                                 <Stack spacing={2}>
-                                  <Stack
-                                    direction={{ xs: "column", md: "row" }}
-                                    spacing={1.5}
-                                    justifyContent="space-between"
-                                    alignItems={{ md: "center" }}
+                                  <Box
+                                    sx={{
+                                      px: { xs: 1.35, md: 1.6 },
+                                      py: { xs: 1.25, md: 1.4 },
+                                      borderRadius: `${INNER_RADIUS}px`,
+                                      bgcolor: alpha("#1D1D1F", 0.025),
+                                      border: "1px solid",
+                                      borderColor: alpha("#1D1D1F", 0.06)
+                                    }}
                                   >
-                                    <Box sx={{ minWidth: 0 }}>
-                                      <Typography variant="h4" fontWeight={800}>
-                                        {item.name || `Item ${itemIndex + 1}`}
-                                      </Typography>
-                                      <Typography variant="body2" color="text.secondary">
-                                        {item.price
-                                          ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
-                                          : "Enter an amount in Step 2"}
-                                      </Typography>
-                                    </Box>
-                                    <Stack
-                                      direction={{ xs: "column", sm: "row" }}
-                                      spacing={1}
-                                      alignItems={{ sm: "center" }}
-                                    >
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        color="inherit"
-                                        startIcon={<RestartAltRoundedIcon />}
-                                        onClick={() => {
-                                          if (item.splitMode === "even") {
-                                            resetEvenValues(itemIndex);
-                                          }
-
-                                          if (item.splitMode === "shares") {
-                                            resetShareValues(itemIndex);
-                                          }
-
-                                          if (item.splitMode === "percent") {
-                                            resetPercentValues(itemIndex);
-                                          }
-                                        }}
-                                        disabled={!canResetItem}
+                                    <Stack spacing={1.1}>
+                                      <Stack
+                                        direction={{ xs: "column", md: "row" }}
+                                        spacing={1.5}
+                                        justifyContent="space-between"
+                                        alignItems={{ md: "center" }}
                                       >
-                                        Reset item
-                                      </Button>
-                                      <ToggleButtonGroup
-                                        exclusive
-                                        value={item.splitMode}
-                                        onChange={(_, nextMode: SplitMode | null) => {
-                                          if (nextMode) {
-                                            setValue(`items.${itemIndex}.splitMode`, nextMode);
-                                          }
-                                        }}
-                                        size="small"
-                                        color="primary"
-                                        sx={{
-                                          alignSelf: { xs: "stretch", md: "center" },
-                                          "& .MuiToggleButton-root": {
-                                            minHeight: 32,
-                                            minWidth: 82,
-                                            px: 1.5,
-                                            textTransform: "none",
-                                            fontWeight: 700
-                                          }
-                                        }}
-                                      >
-                                        <ToggleButton value="even">Even</ToggleButton>
-                                        <ToggleButton value="shares">Shares</ToggleButton>
-                                        <ToggleButton value="percent">Percent</ToggleButton>
-                                      </ToggleButtonGroup>
+                                        <Stack spacing={0.45} sx={{ minWidth: 0, justifyContent: "center", minHeight: 32 }}>
+                                          <Stack
+                                            direction="row"
+                                            spacing={0.75}
+                                            alignItems="center"
+                                            useFlexGap
+                                            flexWrap="wrap"
+                                            sx={{ minHeight: 32 }}
+                                          >
+                                            <Typography
+                                              variant="h4"
+                                              fontWeight={800}
+                                              sx={{ display: "flex", alignItems: "center", lineHeight: 1 }}
+                                            >
+                                              {item.name || `Item ${itemIndex + 1}`}
+                                            </Typography>
+                                            <Chip
+                                              size="small"
+                                              label={
+                                                item.price
+                                                  ? formatMoneyTrailingSymbol(
+                                                      parseMoneyToCents(item.price) ?? 0,
+                                                      currency
+                                                    )
+                                                  : "Enter an amount in Step 2"
+                                              }
+                                              sx={{
+                                                fontWeight: 700,
+                                                alignSelf: "center",
+                                                height: 32,
+                                                "& .MuiChip-label": {
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  height: "100%",
+                                                  px: 1.15
+                                                }
+                                              }}
+                                            />
+                                          </Stack>
+                                        </Stack>
+                                        <Stack
+                                          direction={{ xs: "column", sm: "row" }}
+                                          spacing={1}
+                                          alignItems={{ sm: "center" }}
+                                          sx={{ width: { xs: "100%", sm: "auto" } }}
+                                        >
+                                          <Button
+                                            size="small"
+                                            variant="text"
+                                            color="inherit"
+                                            startIcon={<RestartAltRoundedIcon />}
+                                            onClick={() => {
+                                              if (item.splitMode === "even") {
+                                                resetEvenValues(itemIndex);
+                                              }
+
+                                              if (item.splitMode === "shares") {
+                                                resetShareValues(itemIndex);
+                                              }
+
+                                              if (item.splitMode === "percent") {
+                                                resetPercentValues(itemIndex);
+                                              }
+                                            }}
+                                            disabled={!canResetItem}
+                                          >
+                                            Reset item
+                                          </Button>
+                                          <ToggleButtonGroup
+                                            exclusive
+                                            value={item.splitMode}
+                                            onChange={(_, nextMode: SplitMode | null) => {
+                                              if (nextMode) {
+                                                setValue(`items.${itemIndex}.splitMode`, nextMode);
+                                              }
+                                            }}
+                                            size="small"
+                                            color="primary"
+                                            sx={{
+                                              alignSelf: { xs: "stretch", md: "center" },
+                                              order: { xs: -1, sm: 0 },
+                                              "& .MuiToggleButton-root": {
+                                                minHeight: 32,
+                                                minWidth: 82,
+                                                px: 1.5,
+                                                textTransform: "none",
+                                                fontWeight: 700
+                                              }
+                                            }}
+                                          >
+                                            <ToggleButton value="even">Even</ToggleButton>
+                                            <ToggleButton value="shares">Shares</ToggleButton>
+                                            <ToggleButton value="percent">Percent</ToggleButton>
+                                          </ToggleButtonGroup>
+                                        </Stack>
+                                      </Stack>
                                     </Stack>
-                                  </Stack>
+                                  </Box>
 
                                   <Grid container spacing={1.25}>
                                     {participants.map((participant, allocationIndex) => {
@@ -1752,24 +1824,23 @@ function App() {
 
                                       return (
                                         <Grid size={{ xs: 12, md: 4 }} key={participant.id}>
-                                            <Card
-                                              variant="outlined"
+                                            <Box
                                               sx={{
                                                 height: "100%",
-                                                borderColor: alpha("#1D1D1F", 0.08),
                                                 borderRadius: `${INNER_RADIUS}px`,
-                                                bgcolor: alpha("#FFFFFF", 0.84),
-                                                boxShadow: "none"
+                                                border: "1px solid",
+                                                borderColor: alpha("#1D1D1F", 0.07),
+                                                bgcolor: alpha("#FFFFFF", 0.78)
                                               }}
                                             >
-                                              <CardContent
+                                              <Box
                                                 sx={{
-                                                  px: 1.5,
-                                                  py: 1.35,
+                                                  px: 1.4,
+                                                  py: 1.2,
                                                   height: "100%",
                                                   display: "grid",
                                                   gridTemplateRows: "auto 1fr",
-                                                  rowGap: 0.75
+                                                  rowGap: 0.6
                                                 }}
                                               >
                                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
@@ -1789,7 +1860,7 @@ function App() {
                                                     minHeight: 52,
                                                     display: "flex",
                                                     alignItems: "center",
-                                                    pt: 0.5
+                                                    pt: 0.35
                                                   }}
                                                 >
                                                   {item.splitMode === "even" && allocation && (
@@ -1978,8 +2049,8 @@ function App() {
                                                     </Box>
                                                   )}
                                                 </Box>
-                                              </CardContent>
-                                            </Card>
+                                              </Box>
+                                            </Box>
                                         </Grid>
                                       );
                                     })}
@@ -1987,16 +2058,15 @@ function App() {
 
                                   {allocationError && <Alert severity="error">{allocationError}</Alert>}
                                 </Stack>
-                              </SortableCard>
+                                </CardContent>
+                              </Card>
                             );
                           })}
                         </Stack>
-                      </SortableContext>
-                    </DndContext>
                   </Stack>
                 )}
 
-                {activeStep === 3 && settlement.ok && (
+                {activeStep === 3 && settlement?.ok && (
                   <Stack spacing={2.5}>
                     <Stack
                       direction={{ xs: "column", md: "row" }}
@@ -2150,7 +2220,7 @@ function App() {
                   </Stack>
                 )}
 
-                {activeStep === 3 && !settlement.ok && (
+                {activeStep === 3 && settlement && !settlement.ok && (
                   <Alert severity="error">
                     <Stack spacing={0.25}>
                       <Typography variant="body2" fontWeight={700}>

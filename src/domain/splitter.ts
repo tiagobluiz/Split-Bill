@@ -28,7 +28,8 @@ export type SplitFormValues = {
   items: ItemFormValue[];
 };
 
-export const PARTICIPANT_NAME_MAX_LENGTH = 40;
+export const PARTICIPANT_NAME_MAX_LENGTH = 25;
+export const ITEM_NAME_MAX_LENGTH = 40;
 export const ITEM_AMOUNT_MAX_CENTS = 100_000_000;
 export const ITEM_AMOUNT_TOO_HIGH_MESSAGE =
   "Maximum is 1 000 000";
@@ -586,6 +587,11 @@ export function validateStepTwo(values: SplitFormValues): StepValidationError[] 
       errors.push({
         path: `items.${index}.name`,
         message: item.price.trim() ? "This item needs a name." : "Add an item name."
+      });
+    } else if (item.name.trim().length > ITEM_NAME_MAX_LENGTH) {
+      errors.push({
+        path: `items.${index}.name`,
+        message: `Keep item names under ${ITEM_NAME_MAX_LENGTH} characters.`
       });
     }
 
