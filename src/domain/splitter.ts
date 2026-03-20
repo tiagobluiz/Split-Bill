@@ -557,12 +557,15 @@ export function validateStepOne(values: SplitFormValues): StepValidationError[] 
     });
   }
 
-  if (!values.payerParticipantId) {
+  if (values.participants.length > 0 && !values.payerParticipantId) {
     errors.push({
       path: "payerParticipantId",
       message: "Choose who paid the receipt."
     });
-  } else if (!values.participants.some((participant) => participant.id === values.payerParticipantId)) {
+  } else if (
+    values.participants.length > 0 &&
+    !values.participants.some((participant) => participant.id === values.payerParticipantId)
+  ) {
     errors.push({
       path: "payerParticipantId",
       message: "The selected payer must be one of the participants."

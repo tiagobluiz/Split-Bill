@@ -148,6 +148,7 @@ function App() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importApplyDialogOpen, setImportApplyDialogOpen] = useState(false);
   const [startOverDialogOpen, setStartOverDialogOpen] = useState(false);
+  const [resetItemsDialogOpen, setResetItemsDialogOpen] = useState(false);
   const [importApplyMode, setImportApplyMode] = useState<"append" | "replace">("append");
   const [pasteInput, setPasteInput] = useState("");
   const [pendingImportedItems, setPendingImportedItems] = useState<ReceiptImportItem[]>([]);
@@ -170,7 +171,8 @@ function App() {
     register,
     reset,
     setError,
-    setValue
+    setValue,
+    watch
   } = useForm<SplitFormValues>({
     defaultValues: createDefaultValues()
   });
@@ -196,6 +198,10 @@ function App() {
     [currency, items, participants, payerParticipantId]
   );
   const deferredValues = useDeferredValue(watchedValues);
+  const latestValuesRef = useRef<SplitFormValues>(getValues());
+  const latestStepRef = useRef(activeStep);
+  const latestUnlockedNavigationRef = useRef(hasUnlockedFullNavigation);
+  const autosaveTimeoutRef = useRef<number | null>(null);
 
   function stripTrailingEmptyItemDraft(values: SplitFormValues) {
     const nextItems = [...values.items];
@@ -217,22 +223,51 @@ function App() {
   );
 
   useEffect(() => {
+    latestStepRef.current = activeStep;
+    latestUnlockedNavigationRef.current = hasUnlockedFullNavigation;
+  }, [activeStep, hasUnlockedFullNavigation]);
+
+  useEffect(() => {
     if (showRestoreDialog) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      storeDraft({
-        hasUnlockedFullNavigation,
-        step: activeStep,
-        values: watchedValues
-      });
-    }, 400);
+    const scheduleDraftSave = () => {
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+      }
+
+      autosaveTimeoutRef.current = window.setTimeout(() => {
+        storeDraft({
+          hasUnlockedFullNavigation: latestUnlockedNavigationRef.current,
+          step: latestStepRef.current,
+          values: latestValuesRef.current
+        });
+      }, 400);
+    };
+
+    scheduleDraftSave();
+
+    const subscription = watch((value) => {
+      latestValuesRef.current = {
+        ...createDefaultValues(),
+        ...value,
+        participants: (value.participants ?? []) as ParticipantFormValue[],
+        items: (value.items ?? []) as SplitFormValues["items"],
+        payerParticipantId: value.payerParticipantId ?? "",
+        currency: value.currency ?? "EUR"
+      };
+      scheduleDraftSave();
+    });
 
     return () => {
-      window.clearTimeout(timeoutId);
+      subscription.unsubscribe();
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
     };
-  }, [activeStep, hasUnlockedFullNavigation, showRestoreDialog, watchedValues]);
+  }, [showRestoreDialog, watch]);
 
   useEffect(() => {
     if (hasUnlockedFullNavigation || activeStep < 1) {
@@ -438,6 +473,15 @@ function App() {
     });
     clearErrors("items");
     setReceiptImportStatus({ state: "idle" });
+  }
+
+  function requestResetItems() {
+    setResetItemsDialogOpen(true);
+  }
+
+  function confirmResetItems() {
+    setResetItemsDialogOpen(false);
+    resetItems();
   }
 
   function reorderItems(oldIndex: number, newIndex: number) {
@@ -869,8 +913,8 @@ function App() {
     [deferredValues]
   );
   const settlement = useMemo(
-    () => (activeStep === 3 ? computeSettlement(normalizedDeferredValues) : null),
-    [activeStep, normalizedDeferredValues]
+    () => (activeStep === 3 ? computeSettlement(normalizedWatchedValues) : null),
+    [activeStep, normalizedWatchedValues]
   );
   const canAddParticipant = participantInput.trim().length > 0;
   const visibleStepThreeItems = useMemo(
@@ -913,9 +957,7 @@ function App() {
       return [];
     }
 
-    return Array.from(
-      new Set(validateStepThree(normalizedWatchedValues).map((error) => error.message))
-    );
+    return Array.from(new Set(validateStepThree(normalizedWatchedValues).map((error) => error.message)));
   }, [activeStep, normalizedWatchedValues, settlement]);
 
   return (
@@ -1182,7 +1224,7 @@ function App() {
                     sensors={sensors}
                     register={register}
                     setImportDialogOpen={setImportDialogOpen}
-                    resetItems={resetItems}
+                    resetItems={requestResetItems}
                     handleItemDragEnd={handleItemDragEnd}
                     reorderItems={reorderItems}
                     handleItemSubmitFromEnter={handleItemSubmitFromEnter}
@@ -1193,7 +1235,7 @@ function App() {
                 {activeStep === 2 && (
                   <StepSplit
                     visibleItems={visibleStepThreeItems}
-                    deferredValues={deferredValues}
+                    deferredValues={normalizedDeferredValues}
                     participants={participants}
                     errors={errors}
                     currency={currency}
@@ -1437,6 +1479,21 @@ function App() {
           <Button onClick={() => setStartOverDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" color="primary" startIcon={<AutorenewRoundedIcon />} onClick={confirmStartOver}>
             Start over
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resetItemsDialogOpen} onClose={() => setResetItemsDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Reset items?</DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            This clears all current receipt items in Step 2.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResetItemsDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="primary" startIcon={<AutorenewRoundedIcon />} onClick={confirmResetItems}>
+            Reset items
           </Button>
         </DialogActions>
       </Dialog>

@@ -31,6 +31,7 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography
 } from "@mui/material";
 import { memo, type ReactNode } from "react";
@@ -110,7 +111,13 @@ function SortableCard(props: {
       }}
     >
       <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1.5}>
+        <Stack
+          direction="row"
+          alignItems="flex-start"
+          justifyContent="space-between"
+          spacing={1.5}
+          sx={{ display: props.showMoveControls === false ? "none" : "flex" }}
+        >
           <Stack direction="row" spacing={1} alignItems="center">
             <IconButton
               {...attributes}
@@ -147,9 +154,29 @@ function SortableCard(props: {
             )}
           </Stack>
         </Stack>
-        <Box sx={{ mt: 2 }}>{props.children}</Box>
+        <Box sx={{ mt: props.showMoveControls === false ? 0 : 2 }}>{props.children}</Box>
       </CardContent>
     </Card>
+  );
+}
+
+function SortableInlineHandle({ id }: { id: string }) {
+  const { attributes, listeners } = useSortable({ id });
+
+  return (
+    <IconButton
+      {...attributes}
+      {...listeners}
+      aria-label="Drag to reorder item"
+      size="small"
+      sx={{
+        bgcolor: alpha("#EF5B3C", 0.08),
+        color: "text.secondary",
+        "&:hover": { bgcolor: alpha("#EF5B3C", 0.14) }
+      }}
+    >
+      <DragIndicatorRoundedIcon fontSize="small" />
+    </IconButton>
   );
 }
 
@@ -449,37 +476,87 @@ export const StepItems = memo(function StepItems({
                   showMoveControls={false}
                   tone={!item.name.trim() && !item.price.trim() ? "composer" : "default"}
                 >
-                  <Grid container spacing={1.5}>
-                    <Grid size={{ xs: 12, md: 7 }}>
-                      <TextField
-                        label="Item name"
-                        placeholder="Tomatoes"
-                        fullWidth
-                        {...register(`items.${index}.name` as const)}
-                        error={Boolean(itemNameError)}
-                        helperText={itemNameError}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            handleItemSubmitFromEnter(index);
-                          }
-                        }}
-                        inputProps={{ maxLength: ITEM_NAME_MAX_LENGTH }}
-                        sx={{
-                          "& .MuiInputAdornment-root": {
-                            color: "text.secondary",
-                            fontWeight: 700
-                          },
-                          "& .MuiInputBase-input": {
-                            fontWeight: 700
-                          }
-                        }}
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">#{index + 1}</InputAdornment>
-                        }}
-                      />
+                  <Stack spacing={1.25}>
+                    <Stack
+                      direction="row"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      sx={{ display: { xs: "flex", md: "none" } }}
+                    >
+                      <SortableInlineHandle id={item.id} />
+                      <IconButton
+                        aria-label={`Delete ${item.name || `item ${index + 1}`}`}
+                        onClick={() => removeItem(index)}
+                        type="button"
+                      >
+                        <DeleteOutlineRoundedIcon />
+                      </IconButton>
+                    </Stack>
+                    <Grid container spacing={1.5} alignItems="flex-start">
+                    <Grid size={{ xs: 12, md: "grow" }} sx={{ minWidth: 0 }}>
+                      <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ display: { xs: "none", md: "flex" } }}>
+                        <Box sx={{ pt: 1 }}>
+                          <SortableInlineHandle id={item.id} />
+                        </Box>
+                        <TextField
+                          label="Item name"
+                          placeholder="Tomatoes"
+                          fullWidth
+                          {...register(`items.${index}.name` as const)}
+                          error={Boolean(itemNameError)}
+                          helperText={itemNameError}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleItemSubmitFromEnter(index);
+                            }
+                          }}
+                          inputProps={{ maxLength: ITEM_NAME_MAX_LENGTH }}
+                          sx={{
+                            "& .MuiInputAdornment-root": {
+                              color: "text.secondary",
+                              fontWeight: 700
+                            },
+                            "& .MuiInputBase-input": {
+                              fontWeight: 700
+                            }
+                          }}
+                          InputProps={{
+                            startAdornment: <InputAdornment position="start">#{index + 1}</InputAdornment>
+                          }}
+                        />
+                      </Stack>
+                      <Box sx={{ display: { xs: "block", md: "none" } }}>
+                        <TextField
+                          label="Item name"
+                          placeholder="Tomatoes"
+                          fullWidth
+                          {...register(`items.${index}.name` as const)}
+                          error={Boolean(itemNameError)}
+                          helperText={itemNameError}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleItemSubmitFromEnter(index);
+                            }
+                          }}
+                          inputProps={{ maxLength: ITEM_NAME_MAX_LENGTH }}
+                          sx={{
+                            "& .MuiInputAdornment-root": {
+                              color: "text.secondary",
+                              fontWeight: 700
+                            },
+                            "& .MuiInputBase-input": {
+                              fontWeight: 700
+                            }
+                          }}
+                          InputProps={{
+                            startAdornment: <InputAdornment position="start">#{index + 1}</InputAdornment>
+                          }}
+                        />
+                      </Box>
                     </Grid>
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid size={{ xs: 12, md: "auto" }} sx={{ minWidth: { md: 260 } }}>
                       <TextField
                         label="Price"
                         placeholder="3.49"
@@ -507,18 +584,20 @@ export const StepItems = memo(function StepItems({
                         }}
                       />
                     </Grid>
-                    <Grid size={{ xs: 12, md: 1 }}>
+                    <Grid size={{ xs: 12, md: "auto" }}>
                       <Stack direction="row" justifyContent={{ xs: "flex-end", md: "flex-start" }} sx={{ mt: { md: 1 } }}>
                         <IconButton
                           aria-label={`Delete ${item.name || `item ${index + 1}`}`}
                           onClick={() => removeItem(index)}
                           type="button"
+                          sx={{ display: { xs: "none", md: "inline-flex" } }}
                         >
                           <DeleteOutlineRoundedIcon />
                         </IconButton>
                       </Stack>
                     </Grid>
-                  </Grid>
+                    </Grid>
+                  </Stack>
                 </SortableCard>
               );
             })}
@@ -611,81 +690,95 @@ export const StepSplit = memo(function StepSplit({
                       borderColor: alpha("#1D1D1F", 0.06)
                     }}
                   >
-                    <Stack
-                      direction={{ xs: "column", md: "row" }}
-                      spacing={1.5}
-                      justifyContent="space-between"
-                      alignItems={{ md: "center" }}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        justifyContent: "space-between",
+                        alignItems: { xs: "stretch", sm: "center" },
+                        gap: 1.5
+                      }}
                     >
-                      <Stack sx={{ minWidth: 0, justifyContent: "center", minHeight: 32 }}>
+                      <Stack
+                        sx={{
+                          minWidth: 0,
+                          justifyContent: "center",
+                          minHeight: 32,
+                          flex: { xs: "1 1 100%", sm: "1 1 150px", lg: "1 1 240px" }
+                        }}
+                      >
                         <Stack
                           direction="row"
-                          spacing={0.75}
                           alignItems="center"
-                          useFlexGap
-                          flexWrap="wrap"
-                          sx={{ minHeight: 32 }}
+                          justifyContent="space-between"
+                          spacing={1}
+                          sx={{ minHeight: 32, width: "100%" }}
                         >
-                          <Typography
-                            variant="h4"
-                            fontWeight={800}
-                            sx={{ display: "flex", alignItems: "center", lineHeight: 1 }}
-                          >
-                            {item.name || `Item ${itemIndex + 1}`}
-                          </Typography>
-                          <Chip
+                          <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap" sx={{ minWidth: 0, minHeight: 32 }}>
+                            <Typography
+                              variant="h4"
+                              fontWeight={800}
+                              sx={{ display: "flex", alignItems: "center", lineHeight: 1 }}
+                            >
+                              {item.name || `Item ${itemIndex + 1}`}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={
+                                item.price
+                                  ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
+                                  : "Enter an amount in Step 2"
+                              }
+                              sx={{
+                                fontWeight: 700,
+                                alignSelf: "center",
+                                height: 32,
+                                "& .MuiChip-label": {
+                                  display: "flex",
+                                  alignItems: "center",
+                                  height: "100%",
+                                  px: 1.15
+                                }
+                              }}
+                            />
+                          </Stack>
+                          <Button
                             size="small"
-                            label={
-                              item.price
-                                ? formatMoneyTrailingSymbol(parseMoneyToCents(item.price) ?? 0, currency)
-                                : "Enter an amount in Step 2"
-                            }
-                            sx={{
-                              fontWeight: 700,
-                              alignSelf: "center",
-                              height: 32,
-                              "& .MuiChip-label": {
-                                display: "flex",
-                                alignItems: "center",
-                                height: "100%",
-                                px: 1.15
+                            variant="text"
+                            color="inherit"
+                            startIcon={<RestartAltRoundedIcon />}
+                            onClick={() => {
+                              if (item.splitMode === "even") {
+                                resetEvenValues(itemIndex);
+                              }
+                              if (item.splitMode === "shares") {
+                                resetShareValues(itemIndex);
+                              }
+                              if (item.splitMode === "percent") {
+                                resetPercentValues(itemIndex);
                               }
                             }}
-                          />
+                            sx={{
+                              display: { xs: "inline-flex", sm: "none" },
+                              whiteSpace: "nowrap",
+                              flexShrink: 0
+                            }}
+                            disabled={!canResetItem}
+                          >
+                            Reset item
+                          </Button>
                         </Stack>
                       </Stack>
-                      <Stack
-                        direction={{ xs: "column", sm: "row" }}
-                        spacing={1}
-                        alignItems={{ sm: "center" }}
-                        sx={{ width: { xs: "100%", sm: "auto" } }}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          flexDirection: { xs: "column", sm: "row" },
+                          alignItems: { xs: "stretch", sm: "center" },
+                          gap: { xs: 1, sm: 0.75 },
+                          width: { xs: "100%", sm: "auto" },
+                          flex: { xs: "1 1 100%", sm: "0 1 auto" }
+                        }}
                       >
-                        <ToggleButtonGroup
-                          exclusive
-                          value={item.splitMode}
-                          onChange={(_, nextMode: SplitMode | null) => {
-                            if (nextMode) {
-                              setValue(`items.${itemIndex}.splitMode`, nextMode);
-                            }
-                          }}
-                          size="small"
-                          color="primary"
-                          sx={{
-                            alignSelf: { xs: "stretch", md: "center" },
-                            order: { xs: -1, sm: 0 },
-                            "& .MuiToggleButton-root": {
-                              minHeight: 32,
-                              minWidth: 82,
-                              px: 1.5,
-                              textTransform: "none",
-                              fontWeight: 700
-                            }
-                          }}
-                        >
-                          <ToggleButton value="even">Even</ToggleButton>
-                          <ToggleButton value="shares">Shares</ToggleButton>
-                          <ToggleButton value="percent">Percent</ToggleButton>
-                        </ToggleButtonGroup>
                         <Button
                           size="small"
                           variant="text"
@@ -702,12 +795,47 @@ export const StepSplit = memo(function StepSplit({
                               resetPercentValues(itemIndex);
                             }
                           }}
+                          sx={{
+                            display: { xs: "none", sm: "inline-flex" },
+                            order: { xs: 1, sm: 0 },
+                            alignSelf: { xs: "flex-start", sm: "center" },
+                            whiteSpace: "nowrap"
+                          }}
                           disabled={!canResetItem}
                         >
                           Reset item
                         </Button>
-                      </Stack>
-                    </Stack>
+                        <ToggleButtonGroup
+                          exclusive
+                          value={item.splitMode}
+                          onChange={(_, nextMode: SplitMode | null) => {
+                            if (nextMode) {
+                              setValue(`items.${itemIndex}.splitMode`, nextMode);
+                            }
+                          }}
+                          size="small"
+                          color="primary"
+                          sx={{
+                            alignSelf: { xs: "stretch", sm: "center" },
+                            order: { xs: 0, sm: 1 },
+                            width: { xs: "100%", sm: "auto" },
+                            maxWidth: { xs: "100%", sm: 330, lg: "none" },
+                            "& .MuiToggleButton-root": {
+                              minHeight: 32,
+                              minWidth: { xs: 0, sm: 60, lg: 82 },
+                              px: { xs: 1.25, sm: 1, lg: 1.5 },
+                              textTransform: "none",
+                              fontWeight: 700,
+                              flex: { xs: 1, sm: "0 0 auto" }
+                            }
+                          }}
+                        >
+                          <ToggleButton value="even">Even</ToggleButton>
+                          <ToggleButton value="shares">Shares</ToggleButton>
+                          <ToggleButton value="percent">Percent</ToggleButton>
+                        </ToggleButtonGroup>
+                      </Box>
+                    </Box>
                   </Box>
 
                   <Grid container spacing={1.25}>
@@ -780,20 +908,22 @@ export const StepSplit = memo(function StepSplit({
                                     </Stack>
                                     <Stack direction="row" spacing={0.25} alignItems="center">
                                       <Divider orientation="vertical" flexItem sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.18) }} />
-                                      <IconButton
-                                        aria-label={`Only ${participant.name} for this item`}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          setExclusiveAllocation(itemIndex, allocationIndex, participant.id);
-                                        }}
-                                        size="small"
-                                        sx={{ color: "text.secondary" }}
-                                      >
-                                        <LooksOneRoundedIcon fontSize="small" />
-                                      </IconButton>
-                                    </Stack>
-                                  </ButtonBase>
-                                )}
+                                        <Tooltip title="Only this person" arrow enterDelay={200}>
+                                          <IconButton
+                                            aria-label={`Only ${participant.name} for this item`}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              setExclusiveAllocation(itemIndex, allocationIndex, participant.id);
+                                            }}
+                                            size="small"
+                                            sx={{ color: "text.secondary" }}
+                                          >
+                                            <LooksOneRoundedIcon fontSize="small" />
+                                          </IconButton>
+                                        </Tooltip>
+                                      </Stack>
+                                    </ButtonBase>
+                                  )}
 
                                 {item.splitMode === "shares" && allocation && (
                                   <TextField
@@ -819,27 +949,33 @@ export const StepSplit = memo(function StepSplit({
                                         <InputAdornment position="end">
                                           <Stack direction="row" spacing={0.25} alignItems="center">
                                             <Divider orientation="vertical" flexItem sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.12) }} />
-                                            <IconButton
-                                              aria-label={`Only ${participant.name} for this item`}
-                                              onClick={() => setExclusiveAllocation(itemIndex, allocationIndex, participant.id)}
-                                              edge="end"
-                                              size="small"
-                                              sx={{ color: "text.secondary" }}
-                                            >
-                                              <LooksOneRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              aria-label={`Exclude ${participant.name} from this item`}
-                                              onClick={() => zeroShareValue(itemIndex, allocationIndex)}
-                                              edge="end"
-                                              size="small"
-                                              sx={{ color: "text.secondary" }}
-                                            >
-                                              <CloseRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                          </Stack>
-                                        </InputAdornment>
-                                      )
+                                              <Tooltip title="Only this person" arrow enterDelay={200}>
+                                                <IconButton
+                                                  aria-label={`Only ${participant.name} for this item`}
+                                                  onClick={() =>
+                                                    setExclusiveAllocation(itemIndex, allocationIndex, participant.id)
+                                                  }
+                                                  edge="end"
+                                                  size="small"
+                                                  sx={{ color: "text.secondary" }}
+                                                >
+                                                  <LooksOneRoundedIcon fontSize="small" />
+                                                </IconButton>
+                                              </Tooltip>
+                                              <Tooltip title="Exclude from split" arrow enterDelay={200}>
+                                                <IconButton
+                                                  aria-label={`Exclude ${participant.name} from this item`}
+                                                  onClick={() => zeroShareValue(itemIndex, allocationIndex)}
+                                                  edge="end"
+                                                  size="small"
+                                                  sx={{ color: "text.secondary" }}
+                                                >
+                                                  <CloseRoundedIcon fontSize="small" />
+                                                </IconButton>
+                                              </Tooltip>
+                                            </Stack>
+                                          </InputAdornment>
+                                        )
                                     }}
                                     sx={{ width: "100%", "& .MuiInputBase-root": { height: 48 } }}
                                   />
@@ -870,27 +1006,33 @@ export const StepSplit = memo(function StepSplit({
                                         <InputAdornment position="end">
                                           <Stack direction="row" spacing={0.25} alignItems="center">
                                             <Divider orientation="vertical" flexItem sx={{ mx: 0.25, borderColor: alpha("#1D1D1F", 0.12) }} />
-                                            <IconButton
-                                              aria-label={`Only ${participant.name} for this item`}
-                                              onClick={() => setExclusiveAllocation(itemIndex, allocationIndex, participant.id)}
-                                              edge="end"
-                                              size="small"
-                                              sx={{ color: "text.secondary" }}
-                                            >
-                                              <LooksOneRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              aria-label={`Exclude ${participant.name} from this item`}
-                                              onClick={() => zeroPercentValue(itemIndex, participant.id)}
-                                              edge="end"
-                                              size="small"
-                                              sx={{ color: "text.secondary" }}
-                                            >
-                                              <CloseRoundedIcon fontSize="small" />
-                                            </IconButton>
-                                          </Stack>
-                                        </InputAdornment>
-                                      )
+                                              <Tooltip title="Only this person" arrow enterDelay={200}>
+                                                <IconButton
+                                                  aria-label={`Only ${participant.name} for this item`}
+                                                  onClick={() =>
+                                                    setExclusiveAllocation(itemIndex, allocationIndex, participant.id)
+                                                  }
+                                                  edge="end"
+                                                  size="small"
+                                                  sx={{ color: "text.secondary" }}
+                                                >
+                                                  <LooksOneRoundedIcon fontSize="small" />
+                                                </IconButton>
+                                              </Tooltip>
+                                              <Tooltip title="Exclude from split" arrow enterDelay={200}>
+                                                <IconButton
+                                                  aria-label={`Exclude ${participant.name} from this item`}
+                                                  onClick={() => zeroPercentValue(itemIndex, participant.id)}
+                                                  edge="end"
+                                                  size="small"
+                                                  sx={{ color: "text.secondary" }}
+                                                >
+                                                  <CloseRoundedIcon fontSize="small" />
+                                                </IconButton>
+                                              </Tooltip>
+                                            </Stack>
+                                          </InputAdornment>
+                                        )
                                     }}
                                     sx={{ width: "100%", "& .MuiInputBase-root": { height: 48 } }}
                                   />
