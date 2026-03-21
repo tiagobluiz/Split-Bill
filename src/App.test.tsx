@@ -551,7 +551,8 @@ describe("App", () => {
       await addItemLine(user, "Bread", "2.00");
 
       await user.click(screen.getByRole("button", { name: "Reset items" }));
-      await user.click(screen.getAllByRole("button", { name: "Reset items" }).findLast(isVisible) as HTMLButtonElement);
+      const resetButtons = screen.getAllByRole("button", { name: "Reset items" }).filter(isVisible);
+      await user.click(resetButtons[resetButtons.length - 1] as HTMLButtonElement);
 
       expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
       expect(screen.queryByDisplayValue("Bread")).not.toBeInTheDocument();
