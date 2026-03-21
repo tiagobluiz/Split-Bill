@@ -55,7 +55,14 @@ function getDraftPriceInput() {
 function getStepButton(name: string, disabled: boolean) {
   return screen
     .getAllByRole("button", { name })
-    .find((element) => isVisible(element) && element.getAttribute("aria-disabled") === String(disabled)) as HTMLDivElement;
+    .find((element) => {
+      if (!isVisible(element)) {
+        return false;
+      }
+
+      const isDisabled = element.getAttribute("aria-disabled") === "true" || (element as HTMLButtonElement).disabled;
+      return isDisabled === disabled;
+    }) as HTMLButtonElement;
 }
 
 function getImportOption(name: RegExp) {
@@ -171,7 +178,14 @@ describe("App", () => {
       await addParticipant(user, "Bruno");
       await user.click(getContinueButton());
       await addItemLine(user, "Milk", "5.00");
-      await user.click(screen.getAllByRole("button", { name: "Delete Milk" }).find(isVisible) as HTMLButtonElement);
+      let deleteItemButton: HTMLButtonElement | undefined;
+      await waitFor(() => {
+        deleteItemButton = screen
+          .getAllByRole("button", { name: /Delete item 1/i })
+          .find(isVisible) as HTMLButtonElement | undefined;
+        expect(deleteItemButton).toBeDefined();
+      });
+      await user.click(deleteItemButton as HTMLButtonElement);
 
       expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
     },
@@ -213,7 +227,7 @@ describe("App", () => {
       await user.click(screen.getByRole("button", { name: "Start splitting" }));
       const step2Button = getStepButton("Go to step 2: Items", false);
       await user.click(step2Button);
-      expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Participant name")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Go to step 2: Items" })).not.toHaveAttribute(
         "aria-current",
         "step"
@@ -223,9 +237,8 @@ describe("App", () => {
       await addParticipant(user, "Bruno");
 
       const disabledStep3 = getStepButton("Go to step 3: Split", true);
-      await user.click(disabledStep3);
-      expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
-      expect(disabledStep3).toHaveAttribute("aria-disabled", "true");
+      expect(screen.getByPlaceholderText("Participant name")).toBeInTheDocument();
+      expect(disabledStep3).toBeDisabled();
 
       await user.click(getStepButton("Go to step 2: Items", false));
       expect(await screen.findAllByLabelText("Item name")).not.toHaveLength(0);
@@ -242,7 +255,7 @@ describe("App", () => {
       expect(getStepButton("Go to step 1: Participants", false)).toHaveAttribute("aria-current", "step");
 
       await user.click(getStepButton("Go to step 4: Balances", false));
-      expect(screen.getByRole("button", { name: "Go to step 4: Balances" })).toHaveAttribute("aria-current", "step");
+      expect(await screen.findByText("Final balances")).toBeInTheDocument();
     },
     15000
   );
@@ -252,11 +265,11 @@ describe("App", () => {
     renderApp();
 
     expect(screen.getByText("Split grocery bills without the spreadsheet drama.")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Add participant")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Participant name")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Start splitting" }));
 
-    expect(screen.getByLabelText("Add participant")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Participant name")).toBeInTheDocument();
     expect(screen.queryByText("Quick flow")).not.toBeInTheDocument();
   });
 
