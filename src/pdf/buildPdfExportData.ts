@@ -48,7 +48,7 @@ function comparePeopleByDisplayOrder<T extends { name: string; isPayer: boolean 
     return left.isPayer ? -1 : 1;
   }
 
-  return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+  return left.name.localeCompare(right.name, "en-US", { sensitivity: "base" });
 }
 
 function formatExportDate(date: Date, locale = navigator.language) {
