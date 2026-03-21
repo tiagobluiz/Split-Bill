@@ -1,5 +1,5 @@
 import { CssBaseline, ThemeProvider } from "@mui/material";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -44,12 +44,27 @@ function getContinueButton() {
   return screen.getAllByRole("button", { name: "Continue" }).find(isVisible) as HTMLButtonElement;
 }
 
-function getDraftItemNameInput() {
-  return screen.getAllByLabelText("Item name").find(isVisible) as HTMLInputElement;
+function getFieldInputsByHighestIndex(label: string) {
+  const inputs = screen
+    .getAllByLabelText(label)
+    .filter((element): element is HTMLInputElement => element instanceof HTMLInputElement);
+
+  const highestIndex = inputs.reduce((currentMax, input) => {
+    const nextIndex = Number(input.name.match(/items\.(\d+)\./)?.[1] ?? -1);
+    return Math.max(currentMax, nextIndex);
+  }, -1);
+
+  return inputs
+    .filter((input) => Number(input.name.match(/items\.(\d+)\./)?.[1] ?? -1) === highestIndex)
+    .sort((left, right) => {
+    const leftIndex = Number(left.name.match(/items\.(\d+)\./)?.[1] ?? -1);
+    const rightIndex = Number(right.name.match(/items\.(\d+)\./)?.[1] ?? -1);
+      return rightIndex - leftIndex;
+    });
 }
 
-function getDraftPriceInput() {
-  return screen.getAllByLabelText("Price").find(isVisible) as HTMLInputElement;
+function getDraftItemNameInput() {
+  return getFieldInputsByHighestIndex("Item name").at(-1) as HTMLInputElement;
 }
 
 function getStepButton(name: string, disabled: boolean) {
@@ -77,9 +92,43 @@ async function addParticipant(user: ReturnType<typeof userEvent.setup>, name: st
 }
 
 async function addItemLine(user: ReturnType<typeof userEvent.setup>, name: string, price: string) {
-  await user.type(getDraftItemNameInput(), name);
-  await user.type(getDraftPriceInput(), price);
+  const nameInputs = getFieldInputsByHighestIndex("Item name");
+  const priceInputs = getFieldInputsByHighestIndex("Price");
+
+  for (const input of nameInputs) {
+    fireEvent.change(input, { target: { value: name } });
+  }
+
+  for (const input of priceInputs) {
+    fireEvent.change(input, { target: { value: price } });
+  }
+
+  await user.click(priceInputs.at(-1) as HTMLInputElement);
   await user.keyboard("{Enter}");
+}
+
+async function removeTrailingDraftItem(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => {
+    expect(getDraftItemNameInput()).toBeInTheDocument();
+  });
+  await user.click(getDraftItemNameInput());
+  await user.keyboard("{Enter}");
+}
+
+function getVisibleInputByValue(value: string) {
+  return screen
+    .getAllByLabelText("Item name")
+    .find(
+      (element) =>
+        element instanceof HTMLInputElement &&
+        element.value === value
+    ) as HTMLInputElement;
+}
+
+function getVisibleDeleteItemButton() {
+  return screen
+    .getAllByRole("button", { name: /Delete /i })
+    .find(isVisible) as HTMLButtonElement;
 }
 
 describe("App", () => {
@@ -118,12 +167,10 @@ describe("App", () => {
 
       await user.click(getContinueButton());
       await addItemLine(user, "Milk", "5.00");
+      await removeTrailingDraftItem(user);
       await waitFor(() => {
-        expect(getContinueButton()).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute("aria-current", "step");
       });
-
-      await user.click(getContinueButton());
-
       expect(screen.getAllByText(/2\.50/).length).toBeGreaterThan(0);
 
       await user.click(getContinueButton());
@@ -178,14 +225,10 @@ describe("App", () => {
       await addParticipant(user, "Bruno");
       await user.click(getContinueButton());
       await addItemLine(user, "Milk", "5.00");
-      let deleteItemButton: HTMLButtonElement | undefined;
       await waitFor(() => {
-        deleteItemButton = screen
-          .getAllByRole("button", { name: /Delete item 1/i })
-          .find(isVisible) as HTMLButtonElement | undefined;
-        expect(deleteItemButton).toBeDefined();
+        expect(getVisibleDeleteItemButton()).toBeDefined();
       });
-      await user.click(deleteItemButton as HTMLButtonElement);
+      await user.click(getVisibleDeleteItemButton());
 
       expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
     },
@@ -203,12 +246,10 @@ describe("App", () => {
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
     await addItemLine(user, "Milk", "5.00");
-
-    await user.click(getDraftItemNameInput());
-    await user.keyboard("{Enter}");
+    await removeTrailingDraftItem(user);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute(
+      expect(getStepButton("Go to step 3: Split", false)).toHaveAttribute(
         "aria-current",
         "step"
       );
@@ -247,8 +288,12 @@ describe("App", () => {
       expect(screen.getByRole("button", { name: "Go to step 2: Items" })).toHaveAttribute("aria-current", "step");
 
       await addItemLine(user, "Milk", "5.00");
+      await removeTrailingDraftItem(user);
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "Go to step 4: Balances" })).not.toHaveAttribute("aria-disabled", "true");
+        expect(screen.getByRole("button", { name: "Go to step 4: Balances" })).not.toHaveAttribute(
+          "aria-disabled",
+          "true"
+        );
       });
 
       await user.click(getStepButton("Go to step 1: Participants", false));
@@ -291,10 +336,10 @@ describe("App", () => {
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
     await addItemLine(user, "Milk", "5.00");
+    await removeTrailingDraftItem(user);
     await waitFor(() => {
-      expect(getContinueButton()).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute("aria-current", "step");
     });
-    await user.click(getContinueButton());
     await user.click(getContinueButton());
 
     const exportButton = screen.getByRole("button", { name: "Export to PDF" });
@@ -333,16 +378,18 @@ describe("App", () => {
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
     await addItemLine(user, "Milk", "5.00");
+    await removeTrailingDraftItem(user);
+    await user.click(getStepButton("Go to step 2: Items", false));
 
     const file = new File(["mock"], "receipt.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("Import receipt file"), file);
     await user.click(screen.getByRole("button", { name: "Apply import" }));
 
-    expect(importReceiptMock).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(/Imported 2 items from receipt\.png/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Milk")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Apples")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Bread")).toBeInTheDocument();
+      expect(importReceiptMock).toHaveBeenCalledTimes(1);
+      expect(await screen.findByText(/Imported 2 items from receipt\.png/)).toBeInTheDocument();
+      expect(getVisibleInputByValue("Milk")).toBeInTheDocument();
+      expect(getVisibleInputByValue("Apples")).toBeInTheDocument();
+      expect(getVisibleInputByValue("Bread")).toBeInTheDocument();
     expect(screen.getByText("Ignored 1 total or payment lines.")).toBeInTheDocument();
   });
 
@@ -469,6 +516,8 @@ describe("App", () => {
     await addParticipant(user, "Bruno");
     await user.click(getContinueButton());
     await addItemLine(user, "Milk", "5.00");
+    await removeTrailingDraftItem(user);
+    await user.click(getStepButton("Go to step 2: Items", false));
 
     await user.click(screen.getByRole("button", { name: "Import" }));
     await user.click(getImportOption(/^Paste list/));
@@ -480,8 +529,8 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Apply import" }));
 
     expect(screen.queryByDisplayValue("Milk")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("Bananas")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Bread")).toBeInTheDocument();
+    expect(getVisibleInputByValue("Bananas")).toBeInTheDocument();
+    expect(getVisibleInputByValue("Bread")).toBeInTheDocument();
     expect(await screen.findByText(/Imported 2 items from pasted list/)).toBeInTheDocument();
     },
     15000
