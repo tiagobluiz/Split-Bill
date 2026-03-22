@@ -28,6 +28,12 @@ export type SplitFormValues = {
   items: ItemFormValue[];
 };
 
+export const PARTICIPANT_NAME_MAX_LENGTH = 25;
+export const ITEM_NAME_MAX_LENGTH = 32;
+export const ITEM_AMOUNT_MAX_CENTS = 100_000_000;
+export const ITEM_AMOUNT_TOO_HIGH_MESSAGE =
+  "Maximum is 1 000 000";
+
 export type StepValidationError = {
   path: string;
   message: string;
@@ -524,6 +530,14 @@ export function validateStepOne(values: SplitFormValues): StepValidationError[] 
       return;
     }
 
+    if (name.length > PARTICIPANT_NAME_MAX_LENGTH) {
+      errors.push({
+        path: `participants.${index}.name`,
+        message: `Keep participant names under ${PARTICIPANT_NAME_MAX_LENGTH} characters.`
+      });
+      return;
+    }
+
     const normalized = name.toLowerCase();
     if (duplicates.has(normalized)) {
       errors.push({
@@ -543,12 +557,15 @@ export function validateStepOne(values: SplitFormValues): StepValidationError[] 
     });
   }
 
-  if (!values.payerParticipantId) {
+  if (values.participants.length > 0 && !values.payerParticipantId) {
     errors.push({
       path: "payerParticipantId",
       message: "Choose who paid the receipt."
     });
-  } else if (!values.participants.some((participant) => participant.id === values.payerParticipantId)) {
+  } else if (
+    values.participants.length > 0 &&
+    !values.participants.some((participant) => participant.id === values.payerParticipantId)
+  ) {
     errors.push({
       path: "payerParticipantId",
       message: "The selected payer must be one of the participants."
@@ -572,7 +589,12 @@ export function validateStepTwo(values: SplitFormValues): StepValidationError[] 
     if (!item.name.trim()) {
       errors.push({
         path: `items.${index}.name`,
-        message: "Add an item name."
+        message: item.price.trim() ? "This item needs a name." : "Add an item name."
+      });
+    } else if (item.name.trim().length > ITEM_NAME_MAX_LENGTH) {
+      errors.push({
+        path: `items.${index}.name`,
+        message: `Keep item names under ${ITEM_NAME_MAX_LENGTH} characters.`
       });
     }
 
@@ -581,6 +603,14 @@ export function validateStepTwo(values: SplitFormValues): StepValidationError[] 
       errors.push({
         path: `items.${index}.price`,
         message: "Enter a valid amount different from zero."
+      });
+      return;
+    }
+
+    if (Math.abs(parsedAmount) > ITEM_AMOUNT_MAX_CENTS) {
+      errors.push({
+        path: `items.${index}.price`,
+        message: ITEM_AMOUNT_TOO_HIGH_MESSAGE
       });
     }
   });

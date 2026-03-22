@@ -99,4 +99,30 @@ describe("buildPdfExportData", () => {
   it("builds a deterministic filename", () => {
     expect(buildPdfFilename(new Date("2026-03-09T12:00:00Z"))).toBe("split-bill-2026-03-09.pdf");
   });
+
+  it("orders people with the payer first and the rest alphabetically", () => {
+    const participants = [
+      { id: "zoe", name: "Zoe" },
+      { id: "mike", name: "Mike" },
+      { id: "ana", name: "Ana" }
+    ];
+
+    const data = buildPdfExportData(
+      buildValues({
+        participants,
+        payerParticipantId: "mike",
+        items: [
+          {
+            ...createEmptyItem(participants),
+            id: "item-1",
+            name: "Groceries",
+            price: "9.00"
+          }
+        ]
+      }),
+      new Date("2026-03-09T12:00:00Z")
+    );
+
+    expect(data.people.map((person) => person.name)).toEqual(["Mike", "Ana", "Zoe"]);
+  });
 });

@@ -43,6 +43,14 @@ export type PdfExportData = {
   items: PdfExportItem[];
 };
 
+function comparePeopleByDisplayOrder<T extends { name: string; isPayer: boolean }>(left: T, right: T) {
+  if (left.isPayer !== right.isPayer) {
+    return left.isPayer ? -1 : 1;
+  }
+
+  return left.name.localeCompare(right.name, "en-US", { sensitivity: "base" });
+}
+
 function formatExportDate(date: Date, locale = navigator.language) {
   return new Intl.DateTimeFormat(locale, {
     year: "numeric",
@@ -106,14 +114,16 @@ export function buildPdfExportData(values: SplitFormValues, date = new Date()): 
       }))
   }));
 
-  const people = settlement.data.people.map((person) => ({
+  const people = [...settlement.data.people]
+    .sort(comparePeopleByDisplayOrder)
+    .map((person) => ({
     participantId: person.participantId,
     name: person.name,
     isPayer: person.isPayer,
     paidCents: person.paidCents,
     consumedCents: person.consumedCents,
     netCents: person.netCents
-  }));
+    }));
 
   return {
     appName: "Split-Bill",

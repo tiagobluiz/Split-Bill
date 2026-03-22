@@ -25,6 +25,7 @@
     "@emotion/styled": "^11.14.1",
     "@hookform/resolvers": "^5.2.2",
     "@mui/icons-material": "^7.3.2",
+    "@mui/joy": "^5.0.0-beta.52",
     "@mui/material": "^7.3.2",
     "@react-pdf/renderer": "^4.3.2",
     "pdfjs-dist": "^5.5.207",
