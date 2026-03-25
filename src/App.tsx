@@ -204,7 +204,10 @@ function App() {
   const autosaveTimeoutRef = useRef<number | null>(null);
 
   function stripTrailingEmptyItemDraft(values: SplitFormValues) {
-    const nextItems = [...values.items];
+    const nextItems = values.items.filter(
+      (item): item is SplitFormValues["items"][number] =>
+        Boolean(item) && typeof item.name === "string" && typeof item.price === "string"
+    );
     const lastItem = nextItems.at(-1);
 
     if (lastItem && !lastItem.name.trim() && !lastItem.price.trim()) {
@@ -284,9 +287,7 @@ function App() {
       return;
     }
 
-    const hasTrailingDraft = items.some((item) => !item.name.trim() && !item.price.trim());
-
-    if (hasTrailingDraft) {
+    if (items.length > 0) {
       return;
     }
 
@@ -442,35 +443,22 @@ function App() {
       return;
     }
 
-    reset({
-      ...currentValues,
-      items: [
-        ...currentValues.items,
-        {
-          ...createEmptyItem(currentValues.participants),
-          name,
-          price
-        }
-      ]
-    });
+    itemsArray.append(
+      {
+        ...createEmptyItem(currentValues.participants),
+        name,
+        price
+      },
+      { shouldFocus: false }
+    );
   }
 
   function removeItem(index: number) {
-    const currentValues = getValues();
-
-    reset({
-      ...currentValues,
-      items: currentValues.items.filter((_, currentIndex) => currentIndex !== index)
-    });
+    itemsArray.remove(index);
   }
 
   function resetItems() {
-    const currentValues = getValues();
-
-    reset({
-      ...currentValues,
-      items: []
-    });
+    itemsArray.replace([]);
     clearErrors("items");
     setReceiptImportStatus({ state: "idle" });
   }
@@ -506,7 +494,11 @@ function App() {
 
     reset({
       ...currentValues,
-      items: [...preservedItems, ...mappedItems]
+      items: [
+        ...preservedItems,
+        ...mappedItems,
+        createEmptyItem(currentValues.participants)
+      ]
     });
   }
 
@@ -1660,5 +1652,3 @@ function App() {
 }
 
 export default App;
-
-

@@ -494,8 +494,8 @@ export const StepItems = memo(function StepItems({
                     </Stack>
                     <Grid container spacing={1.5} alignItems="flex-start">
                     <Grid size={{ xs: 12, md: "grow" }} sx={{ minWidth: 0 }}>
-                      <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ display: { xs: "none", md: "flex" } }}>
-                        <Box sx={{ pt: 1 }}>
+                      <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                        <Box sx={{ pt: 1, display: { xs: "none", md: "block" } }}>
                           <SortableInlineHandle id={item.id} />
                         </Box>
                         <TextField
@@ -526,35 +526,6 @@ export const StepItems = memo(function StepItems({
                           }}
                         />
                       </Stack>
-                      <Box sx={{ display: { xs: "block", md: "none" } }}>
-                        <TextField
-                          label="Item name"
-                          placeholder="Tomatoes"
-                          fullWidth
-                          {...register(`items.${index}.name` as const)}
-                          error={Boolean(itemNameError)}
-                          helperText={itemNameError}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              handleItemSubmitFromEnter(index);
-                            }
-                          }}
-                          inputProps={{ maxLength: ITEM_NAME_MAX_LENGTH }}
-                          sx={{
-                            "& .MuiInputAdornment-root": {
-                              color: "text.secondary",
-                              fontWeight: 700
-                            },
-                            "& .MuiInputBase-input": {
-                              fontWeight: 700
-                            }
-                          }}
-                          InputProps={{
-                            startAdornment: <InputAdornment position="start">#{index + 1}</InputAdornment>
-                          }}
-                        />
-                      </Box>
                     </Grid>
                     <Grid size={{ xs: 12, md: "auto" }} sx={{ minWidth: { md: 260 } }}>
                       <TextField
