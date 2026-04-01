@@ -260,6 +260,39 @@ describe("App", () => {
   );
 
   it(
+    "allows clearing a percent field with backspace before typing a new value",
+    async () => {
+      const user = userEvent.setup();
+      renderApp();
+
+      await user.click(screen.getByRole("button", { name: "Start splitting" }));
+      await addParticipant(user, "Ana");
+      await addParticipant(user, "Bruno");
+      await user.click(getContinueButton());
+      await addItemLine(user, "Milk", "5.00");
+      await removeTrailingDraftItem(user);
+
+      await user.click(screen.getByRole("button", { name: "Percent" }));
+
+      const percentInput = screen
+        .getAllByLabelText("Percent")
+        .find((element): element is HTMLInputElement => element instanceof HTMLInputElement && isVisible(element));
+
+      expect(percentInput).toBeDefined();
+
+      await user.click(percentInput as HTMLInputElement);
+      await user.keyboard("{Backspace}{Backspace}");
+
+      expect(percentInput).toHaveValue(null);
+
+      await user.type(percentInput as HTMLInputElement, "7");
+
+      expect(percentInput).toHaveValue(7);
+    },
+    15000
+  );
+
+  it(
     "allows direct step navigation only within the unlocked range",
     async () => {
       const user = userEvent.setup();
