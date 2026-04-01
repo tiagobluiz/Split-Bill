@@ -709,6 +709,19 @@ function App() {
 
   function updatePercentValue(itemIndex: number, participantId: string, nextValue: string) {
     const currentAllocations = getValues(`items.${itemIndex}.allocations`) as AllocationFormValue[];
+
+    if (nextValue.trim() === "") {
+      setItemAllocations(
+        itemIndex,
+        currentAllocations.map((allocation) =>
+          allocation.participantId === participantId
+            ? { ...allocation, percent: nextValue }
+            : allocation
+        )
+      );
+      return;
+    }
+
     const nextAllocations = rebalancePercentAllocations(currentAllocations, participantId, nextValue);
 
     if (!nextAllocations) {
@@ -1660,5 +1673,4 @@ function App() {
 }
 
 export default App;
-
 
