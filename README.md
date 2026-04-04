@@ -38,6 +38,7 @@ consumed, and the app calculates who should reimburse the payer.
 ## Documentation
 
 - Product plan: `docs/main-spa-plan.md`
+- Logic handoff package for future ports: `docs/logic/README.md`
 
 ## Notes
 
