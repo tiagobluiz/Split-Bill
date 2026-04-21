@@ -94,6 +94,28 @@ describe("buildPdfExportData", () => {
       { participantId: "ana", name: "Ana", amountCents: 100 },
       { participantId: "bruno", name: "Bruno", amountCents: 400 }
     ]);
+    expect(data.personBreakdown).toEqual([
+      {
+        participantId: "ana",
+        name: "Ana",
+        totalAmountCents: 500,
+        items: [
+          { itemId: "even-item", itemName: "Milk", amountCents: 200 },
+          { itemId: "shares-item", itemName: "Cheese", amountCents: 200 },
+          { itemId: "percent-item", itemName: "Juice", amountCents: 100 }
+        ]
+      },
+      {
+        participantId: "bruno",
+        name: "Bruno",
+        totalAmountCents: 700,
+        items: [
+          { itemId: "even-item", itemName: "Milk", amountCents: 200 },
+          { itemId: "shares-item", itemName: "Cheese", amountCents: 100 },
+          { itemId: "percent-item", itemName: "Juice", amountCents: 400 }
+        ]
+      }
+    ]);
   });
 
   it("builds a deterministic filename", () => {
