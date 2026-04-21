@@ -63,20 +63,22 @@ type ReceiptImportStatus =
   | { state: "error"; message: string };
 
 function isEqualSplitAcrossEveryone(item: SplitFormValues["items"][number], participantCount: number) {
-  if (participantCount <= 0 || item.allocations.length !== participantCount) {
+  const allocations = Array.isArray(item.allocations) ? item.allocations : [];
+
+  if (participantCount <= 0 || allocations.length !== participantCount) {
     return false;
   }
 
   if (item.splitMode === "even") {
-    return item.allocations.every((allocation) => allocation.evenIncluded);
+    return allocations.every((allocation) => allocation.evenIncluded);
   }
 
   if (item.splitMode === "shares") {
-    return item.allocations.every((allocation) => Math.abs(Number(allocation.shares || 0) - 1) < 0.001);
+    return allocations.every((allocation) => Math.abs(Number(allocation.shares || 0) - 1) < 0.001);
   }
 
   const expectedPercent = 100 / participantCount;
-  return item.allocations.every(
+  return allocations.every(
     (allocation) => Math.abs(Number(allocation.percent || 0) - expectedPercent) < 0.001
   );
 }
@@ -809,9 +811,10 @@ export const StepSplit = memo(function StepSplit({
                     </Box>
                   </Box>
 
-                  <Grid container spacing={1.25}>
+                <Grid container spacing={1.25}>
                     {participants.map((participant, allocationIndex) => {
-                      const allocation = item.allocations[allocationIndex] as AllocationFormValue | undefined;
+                      const itemAllocations = Array.isArray(item.allocations) ? item.allocations : [];
+                      const allocation = itemAllocations[allocationIndex] as AllocationFormValue | undefined;
                       const previewPerson = previewPeople.find((person) => person.participantId === participant.id);
 
                       return (

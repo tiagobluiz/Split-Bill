@@ -260,6 +260,44 @@ describe("App", () => {
   );
 
   it(
+    "allows continuing after returning to items and deleting one split item",
+    async () => {
+      const user = userEvent.setup();
+      renderApp();
+
+      await user.click(screen.getByRole("button", { name: "Start splitting" }));
+      await addParticipant(user, "Ana");
+      await addParticipant(user, "Bruno");
+      await user.click(getContinueButton());
+      await addItemLine(user, "Milk", "5.00");
+      await addItemLine(user, "Bread", "2.00");
+      await removeTrailingDraftItem(user);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute("aria-current", "step");
+      });
+
+      await user.click(screen.getByRole("button", { name: "Back" }));
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Go to step 2: Items" })).toHaveAttribute("aria-current", "step");
+      });
+
+      const deleteBreadButton = screen
+        .getAllByRole("button", { name: "Delete Bread" })
+        .find(isVisible) as HTMLButtonElement;
+      await user.click(deleteBreadButton);
+      await user.click(getContinueButton());
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute("aria-current", "step");
+      });
+      expect(screen.getByText("These amounts are a preview. Final cents are settled in Balances.")).toBeInTheDocument();
+    },
+    15000
+  );
+
+  it(
     "allows clearing a percent field with backspace before typing a new value",
     async () => {
       const user = userEvent.setup();
