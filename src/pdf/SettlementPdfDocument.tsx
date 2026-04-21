@@ -118,12 +118,6 @@ const styles = StyleSheet.create({
     color: "#6E6E73",
     marginBottom: 8
   },
-  personTotal: {
-    fontSize: 11,
-    fontWeight: "bold",
-    marginBottom: 8,
-    color: "#F05D3D"
-  },
   shareRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -216,9 +210,6 @@ export function SettlementPdfDocument({ data }: Props) {
                   {formatPdfMoney(person.totalAmountCents, data.currency)}
                 </Text>
               </View>
-              <Text style={styles.personTotal}>
-                Total consumed: {formatPdfMoney(person.totalAmountCents, data.currency)}
-              </Text>
               {person.items.map((item) => (
                 <View key={`${person.participantId}-${item.itemId}`} style={styles.shareRow}>
                   <Text>{item.itemName}</Text>
