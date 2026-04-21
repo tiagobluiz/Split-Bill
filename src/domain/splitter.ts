@@ -142,6 +142,10 @@ export function createAllocation(participantId: string): AllocationFormValue {
   };
 }
 
+function getItemAllocations(item: ItemFormValue) {
+  return Array.isArray(item.allocations) ? item.allocations : [];
+}
+
 function formatPercentFromBasisPoints(basisPoints: number) {
   const whole = Math.floor(basisPoints / 100);
   const fraction = basisPoints % 100;
@@ -283,8 +287,9 @@ export function syncItemAllocations(
   const defaultPercentages = createDefaultPercentValues(participants.length);
 
   return items.map((item) => {
+    const itemAllocations = getItemAllocations(item);
     const allocationByParticipant = new Map(
-      item.allocations.map((allocation) => [allocation.participantId, allocation])
+      itemAllocations.map((allocation) => [allocation.participantId, allocation])
     );
 
     return {
@@ -496,21 +501,23 @@ function roundAggregateShares(
 }
 
 function allocationsForItem(item: ItemFormValue) {
+  const allocations = getItemAllocations(item);
+
   if (item.splitMode === "even") {
-    return item.allocations.map((allocation) => ({
+    return allocations.map((allocation) => ({
       participantId: allocation.participantId,
       weight: allocation.evenIncluded ? 1 : 0
     }));
   }
 
   if (item.splitMode === "shares") {
-    return item.allocations.map((allocation) => ({
+    return allocations.map((allocation) => ({
       participantId: allocation.participantId,
       weight: parseDecimal(allocation.shares) ?? 0
     }));
   }
 
-  return item.allocations.map((allocation) => ({
+  return allocations.map((allocation) => ({
     participantId: allocation.participantId,
     weight: parseDecimal(allocation.percent) ?? 0
   }));
@@ -622,8 +629,10 @@ export function validateStepThree(values: SplitFormValues): StepValidationError[
   const errors: StepValidationError[] = [];
 
   values.items.forEach((item, itemIndex) => {
+    const allocations = getItemAllocations(item);
+
     if (item.splitMode === "even") {
-      const included = item.allocations.filter((allocation) => allocation.evenIncluded);
+      const included = allocations.filter((allocation) => allocation.evenIncluded);
       if (included.length === 0) {
         errors.push({
           path: `items.${itemIndex}.allocations`,
@@ -634,7 +643,7 @@ export function validateStepThree(values: SplitFormValues): StepValidationError[
     }
 
     if (item.splitMode === "shares") {
-      const totalShares = item.allocations.reduce(
+      const totalShares = allocations.reduce(
         (sum, allocation) => sum + (parseDecimal(allocation.shares) ?? 0),
         0
       );
@@ -646,7 +655,7 @@ export function validateStepThree(values: SplitFormValues): StepValidationError[
         });
       }
 
-      item.allocations.forEach((allocation, allocationIndex) => {
+      allocations.forEach((allocation, allocationIndex) => {
         const shares = parseDecimal(allocation.shares);
         if (shares === null || shares < 0) {
           errors.push({
@@ -659,12 +668,12 @@ export function validateStepThree(values: SplitFormValues): StepValidationError[
       return;
     }
 
-    const totalPercent = item.allocations.reduce(
+    const totalPercent = allocations.reduce(
       (sum, allocation) => sum + (parseDecimal(allocation.percent) ?? 0),
       0
     );
 
-    item.allocations.forEach((allocation, allocationIndex) => {
+    allocations.forEach((allocation, allocationIndex) => {
       const percent = parseDecimal(allocation.percent);
       if (percent === null || percent < 0) {
         errors.push({

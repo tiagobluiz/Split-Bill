@@ -4,6 +4,7 @@ import {
   createDefaultPercentValues,
   createEmptyItem,
   rebalancePercentAllocations,
+  validateStepThree,
   type SplitFormValues
 } from "./splitter";
 
@@ -181,5 +182,26 @@ describe("splitter", () => {
       { participantId: "carla", evenIncluded: true, shares: "1", percent: "50", percentLocked: true },
       { participantId: "dina", evenIncluded: true, shares: "1", percent: "15", percentLocked: false }
     ]);
+  });
+
+  it("handles items without allocations without throwing", () => {
+    const values = buildValues({
+      participants: [
+        { id: "ana", name: "Ana" },
+        { id: "bruno", name: "Bruno" }
+      ],
+      payerParticipantId: "ana",
+      items: [
+        {
+          id: "item-1",
+          name: "Juice",
+          price: "4.00",
+          splitMode: "shares"
+        } as SplitFormValues["items"][number]
+      ]
+    });
+
+    expect(() => validateStepThree(values)).not.toThrow();
+    expect(() => computeSettlement(values)).not.toThrow();
   });
 });
