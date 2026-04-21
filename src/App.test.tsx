@@ -260,7 +260,7 @@ describe("App", () => {
   );
 
   it(
-    "allows continuing after returning to items and deleting one split item",
+    "allows reaching final balances after returning to items and deleting one split item",
     async () => {
       const user = userEvent.setup();
       renderApp();
@@ -293,6 +293,9 @@ describe("App", () => {
         expect(screen.getByRole("button", { name: "Go to step 3: Split" })).toHaveAttribute("aria-current", "step");
       });
       expect(screen.getByText("These amounts are a preview. Final cents are settled in Balances.")).toBeInTheDocument();
+
+      await user.click(getContinueButton());
+      expect(await screen.findByText("Final balances")).toBeInTheDocument();
     },
     15000
   );

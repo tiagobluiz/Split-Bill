@@ -454,7 +454,13 @@ function App() {
   }
 
   function removeItem(index: number) {
-    itemsArray.remove(index);
+    const currentValues = getValues();
+    const nextItems = currentValues.items.filter((_, currentIndex) => currentIndex !== index);
+
+    reset({
+      ...currentValues,
+      items: nextItems
+    });
   }
 
   function resetItems() {
