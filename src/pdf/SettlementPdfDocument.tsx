@@ -198,6 +198,27 @@ export function SettlementPdfDocument({ data }: Props) {
             </View>
           ))}
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Person breakdown</Text>
+          <Text style={styles.sectionNote}>{data.note}</Text>
+          {data.personBreakdown.map((person) => (
+            <View key={person.participantId} style={styles.itemCard} wrap={false}>
+              <View style={styles.itemHeader}>
+                <Text style={styles.itemTitle}>{person.name}</Text>
+                <Text style={styles.itemTitle}>
+                  {formatPdfMoney(person.totalAmountCents, data.currency)}
+                </Text>
+              </View>
+              {person.items.map((item) => (
+                <View key={`${person.participantId}-${item.itemId}`} style={styles.shareRow}>
+                  <Text>{item.itemName}</Text>
+                  <Text>{formatPdfMoney(item.amountCents, data.currency)}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
       </Page>
     </Document>
   );
