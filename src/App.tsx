@@ -126,7 +126,195 @@ const STEP_SUMMARIES = [
 const SURFACE_RADIUS = 18;
 const INNER_RADIUS = 14;
 
+type PrivacyPolicySection =
+  | {
+      title: string;
+      paragraphs: string[];
+    }
+  | {
+      title: string;
+      list: string[];
+    }
+  | {
+      title: string;
+      subsections: {
+        title: string;
+        paragraphs: string[];
+      }[];
+    };
+
+const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
+  {
+    title: "Summary",
+    paragraphs: [
+      "Split Bill is designed to work primarily offline. Most bill-splitting data is stored locally on your device. We do not require you to create an account to use the app.",
+      "We do collect some limited information through analytics and crash reporting tools on Android, and the app may make limited internet requests for optional features such as exchange-rate lookups and AI handoff."
+    ]
+  },
+  {
+    title: "Information We Collect",
+    subsections: [
+      {
+        title: "Information you enter into the app",
+        paragraphs: [
+          "You may enter information such as owner names, participant names, bill names, item names and prices, split allocations, and related bill details.",
+          "This information is stored locally on your device using on-device storage."
+        ]
+      },
+      {
+        title: "Device and app information",
+        paragraphs: [
+          "On Android, we use Firebase Analytics and Firebase Crashlytics. These services may collect or process app activity and usage events, crash logs and diagnostic information, device or app instance identifiers, and technical information about your device, operating system, and app version."
+        ]
+      },
+      {
+        title: "Information used for optional online features",
+        paragraphs: [
+          "The app may send limited information to third-party services when you use certain optional features.",
+          "Exchange-rate requests may send currency codes to a public exchange-rate API, and AI handoff features may open third-party apps or websites so you can transfer a prompt or pasted text into a provider of your choice."
+        ]
+      }
+    ]
+  },
+  {
+    title: "How We Use Information",
+    list: [
+      "provide and maintain the app",
+      "store and display your split records locally",
+      "calculate bills and settlements",
+      "improve app stability and performance",
+      "diagnose and fix crashes",
+      "provide optional online features such as exchange-rate lookups",
+      "support optional AI handoff workflows"
+    ]
+  },
+  {
+    title: "Data Sharing",
+    paragraphs: [
+      "We do not sell your personal information.",
+      "We may share information with service providers and third parties only as needed to operate the app and its optional features, including Google Firebase Analytics, Google Firebase Crashlytics, exchange-rate service providers used by the app, and third-party AI providers that you choose to open through the app.",
+      "These services may receive technical data, usage data, crash information, or the content you choose to send through an optional feature."
+    ]
+  },
+  {
+    title: "Data Storage and Retention",
+    paragraphs: [
+      "Most app data is stored locally on your device in a SQLite database and remains under your control.",
+      "Analytics and crash data may be retained by our service providers according to their own retention policies. We do not use this data to create user accounts.",
+      "If you uninstall the app, locally stored app data on your device is generally removed with the app. You may also be able to clear app data through your device settings."
+    ]
+  },
+  {
+    title: "Security",
+    paragraphs: [
+      "We use reasonable technical and organizational safeguards designed to protect information. Data transmitted to third-party services is sent over encrypted connections where supported by the service.",
+      "No method of transmission or storage is completely secure, and we cannot guarantee absolute security."
+    ]
+  },
+  {
+    title: "Your Choices",
+    list: [
+      "stop using optional online features",
+      "disable notifications through your device settings",
+      "uninstall the app to remove locally stored data",
+      "control analytics or crash reporting where your device or app settings provide that option"
+    ]
+  },
+  {
+    title: "Children's Privacy",
+    paragraphs: [
+      "Split Bill is not directed to children, and we do not knowingly collect personal information from children."
+    ]
+  },
+  {
+    title: "Changes to This Policy",
+    paragraphs: [
+      "We may update this Privacy Policy from time to time. If we make material changes, we will update the effective date above and, where appropriate, provide additional notice."
+    ]
+  },
+  {
+    title: "Contact Us",
+    paragraphs: [
+      "If you have any questions about this Privacy Policy or our data practices, contact us at:",
+      "Email: miagology-tech@proton.me"
+    ]
+  }
+] as const;
+
+function PrivacyPolicyPage() {
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: "background.default",
+        backgroundImage:
+          "radial-gradient(circle at top left, rgba(239,91,60,0.12), transparent 30%), radial-gradient(circle at right 20%, rgba(15,118,110,0.12), transparent 25%), linear-gradient(180deg, #FFF8F2 0%, #FFFDFC 72%)"
+      }}
+    >
+      <Box sx={{ maxWidth: 900, mx: "auto", px: { xs: 2, md: 4 }, py: { xs: 4, md: 6 } }}>
+        <Stack spacing={3}>
+          <Stack spacing={1.5}>
+            <Chip label="Privacy policy" color="primary" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
+            <Typography variant="h1">Split Bill Privacy Policy</Typography>
+            <Typography color="text.secondary">
+              Effective date: 2026-06-03 · Developer: Miagology · Email: miagology-tech@proton.me
+            </Typography>
+            <Typography color="text.secondary">
+              Split Bill is designed to work primarily offline, with optional online features for exchange-rate lookups and AI handoff.
+            </Typography>
+          </Stack>
+
+          {PRIVACY_POLICY_SECTIONS.map((section) => (
+            <Card key={section.title} variant="outlined" sx={{ borderRadius: 4 }}>
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Typography variant="h2">{section.title}</Typography>
+                  {"paragraphs" in section &&
+                    section.paragraphs.map((paragraph) => (
+                      <Typography key={paragraph} color="text.secondary">
+                        {paragraph}
+                      </Typography>
+                    ))}
+                  {"list" in section && (
+                    <Box component="ul" sx={{ m: 0, pl: 3, color: "text.secondary" }}>
+                      {section.list.map((item) => (
+                        <Box component="li" key={item} sx={{ mb: 0.75 }}>
+                          <Typography color="text.secondary">{item}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                  {"subsections" in section &&
+                    section.subsections.map((subsection) => (
+                      <Stack key={subsection.title} spacing={1} sx={{ pt: 0.5 }}>
+                        <Typography variant="h3">{subsection.title}</Typography>
+                        {subsection.paragraphs.map((paragraph) => (
+                          <Typography key={paragraph} color="text.secondary">
+                            {paragraph}
+                          </Typography>
+                        ))}
+                      </Stack>
+                    ))}
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+
+          <Button component="a" href="/" variant="contained" sx={{ alignSelf: "flex-start" }}>
+            Back to Split Bill
+          </Button>
+        </Stack>
+      </Box>
+    </Box>
+  );
+}
+
 function App() {
+  const pathname = window.location.pathname.replace(/\/$/, "") || "/";
+  if (pathname === "/privacy") {
+    return <PrivacyPolicyPage />;
+  }
+
   const storedDraft = loadStoredDraft();
   const [hasStarted, setHasStarted] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
@@ -1009,6 +1197,9 @@ function App() {
                       }}
                     >
                       Start splitting
+                    </Button>
+                    <Button component="a" href="/privacy" variant="text" sx={{ alignSelf: "flex-start" }}>
+                      Privacy policy
                     </Button>
                   </Stack>
                 </Stack>

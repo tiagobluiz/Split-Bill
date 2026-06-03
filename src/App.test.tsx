@@ -31,6 +31,10 @@ function renderApp() {
   );
 }
 
+function setPathname(pathname: string) {
+  window.history.pushState({}, "", pathname);
+}
+
 function isVisible(element: Element | null): element is HTMLElement {
   if (!(element instanceof HTMLElement)) {
     return false;
@@ -134,6 +138,7 @@ function getVisibleDeleteItemButton() {
 describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setPathname("/");
     exportSettlementPdfMock.mockReset();
     importReceiptMock.mockReset();
     clipboardWriteTextMock.mockReset();
@@ -156,12 +161,27 @@ describe("App", () => {
   });
 
   it(
+    "renders the privacy policy route",
+    async () => {
+      setPathname("/privacy");
+      renderApp();
+
+      expect(screen.getByRole("heading", { name: "Split Bill Privacy Policy" })).toBeInTheDocument();
+      expect(screen.getByText("Effective date: 2026-06-03 · Developer: Miagology · Email: miagology-tech@proton.me")).toBeInTheDocument();
+      expect(screen.getByText("Information We Collect")).toBeInTheDocument();
+      expect(screen.getByText("Children's Privacy")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Back to Split Bill" })).toHaveAttribute("href", "/");
+    }
+  );
+
+  it(
     "walks through the core flow and shows the final settlement",
     async () => {
       const user = userEvent.setup();
       renderApp();
 
       await user.click(screen.getByRole("button", { name: "Start splitting" }));
+      expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "/privacy");
       await addParticipant(user, "Ana");
       await addParticipant(user, "Bruno");
 
