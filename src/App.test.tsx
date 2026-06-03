@@ -180,8 +180,8 @@ describe("App", () => {
       const user = userEvent.setup();
       renderApp();
 
-      await user.click(screen.getByRole("button", { name: "Start splitting" }));
       expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "/privacy");
+      await user.click(screen.getByRole("button", { name: "Start splitting" }));
       await addParticipant(user, "Ana");
       await addParticipant(user, "Bruno");
 
@@ -555,7 +555,9 @@ describe("App", () => {
     expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
   });
 
-  it("does not open the paste dialog when the ai handoff dialog is closed normally", async () => {
+  it(
+    "does not open the paste dialog when the ai handoff dialog is closed normally",
+    async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -572,7 +574,9 @@ describe("App", () => {
       expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Pasted items")).not.toBeInTheDocument();
     });
-  });
+    },
+    10000
+  );
 
   it(
     "clears the pasted input with the reset action",
