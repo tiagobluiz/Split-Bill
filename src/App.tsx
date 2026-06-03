@@ -1249,9 +1249,6 @@ function App() {
                     >
                       Start splitting
                     </Button>
-                    <Button component="a" href="/privacy" variant="text" sx={{ alignSelf: "flex-start" }}>
-                      Privacy policy
-                    </Button>
                   </Stack>
                 </Stack>
               </Grid>
