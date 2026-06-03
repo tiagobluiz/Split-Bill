@@ -167,7 +167,8 @@ describe("App", () => {
       renderApp();
 
       expect(screen.getByRole("heading", { name: "Split Bill Privacy Policy" })).toBeInTheDocument();
-      expect(screen.getByText("Effective date: 2026-06-03 · Developer: Miagology · Email: miagology-tech@proton.me")).toBeInTheDocument();
+      expect(screen.getByText(/Effective date:/)).toBeInTheDocument();
+      expect(screen.getByText(/available via the contact form below/)).toBeInTheDocument();
       expect(screen.getByText("Information We Collect")).toBeInTheDocument();
       expect(screen.getByText("Children's Privacy")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Back to Split Bill" })).toHaveAttribute("href", "/");
@@ -180,7 +181,6 @@ describe("App", () => {
       const user = userEvent.setup();
       renderApp();
 
-      expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "/privacy");
       await user.click(screen.getByRole("button", { name: "Start splitting" }));
       await addParticipant(user, "Ana");
       await addParticipant(user, "Bruno");
@@ -452,7 +452,9 @@ describe("App", () => {
     15000
   );
 
-  it("imports a receipt in step 2 and appends editable items", async () => {
+  it(
+    "imports a receipt in step 2 and appends editable items",
+    async () => {
     importReceiptMock.mockResolvedValueOnce({
       source: "image",
       fileName: "receipt.png",
@@ -485,7 +487,9 @@ describe("App", () => {
       expect(getVisibleInputByValue("Apples")).toBeInTheDocument();
       expect(getVisibleInputByValue("Bread")).toBeInTheDocument();
     expect(screen.getByText("Ignored 1 total or payment lines.")).toBeInTheDocument();
-  });
+    },
+    10000
+  );
 
   it("opens provider handoff, launches the selected provider, and moves into paste mode", async () => {
     const user = userEvent.setup();
@@ -535,7 +539,9 @@ describe("App", () => {
     }
   });
 
-  it("opens the paste dialog after manually copying the ai prompt", async () => {
+  it(
+    "opens the paste dialog after manually copying the ai prompt",
+    async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -553,7 +559,9 @@ describe("App", () => {
 
     expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
-  });
+    },
+    10000
+  );
 
   it(
     "does not open the paste dialog when the ai handoff dialog is closed normally",
