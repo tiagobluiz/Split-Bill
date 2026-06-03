@@ -265,7 +265,7 @@ function PrivacyPolicyPage() {
           </Stack>
 
           {PRIVACY_POLICY_SECTIONS.map((section) => (
-            <Card key={section.title} variant="outlined" sx={{ borderRadius: 4 }}>
+            <Card key={section.title} variant="outlined" sx={{ borderRadius: 2 }}>
               <CardContent>
                 <Stack spacing={1.5}>
                   <Typography variant="h2">{section.title}</Typography>
