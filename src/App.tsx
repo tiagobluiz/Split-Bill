@@ -148,6 +148,7 @@ const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "Summary",
     paragraphs: [
       "Split Bill is designed to work primarily offline. Most bill-splitting data is stored locally on your device. We do not require you to create an account to use the app.",
+      "This Privacy Policy applies only to the Split Bill mobile application.",
       "We do collect some limited information through analytics and crash reporting tools on Android, and the app may make limited internet requests for optional features such as exchange-rate lookups and AI handoff."
     ]
   },
