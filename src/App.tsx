@@ -53,7 +53,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent
+  type ChangeEvent,
+  type FormEvent
 } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import {
@@ -233,16 +234,33 @@ const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "We may update this Privacy Policy from time to time. If we make material changes, we will update the effective date above and, where appropriate, provide additional notice."
     ]
   },
-  {
-    title: "Contact Us",
-    paragraphs: [
-      "If you have any questions about this Privacy Policy or our data practices, contact us at:",
-      "Email: miagology-tech@proton.me"
-    ]
-  }
 ] as const;
 
 function PrivacyPolicyPage() {
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactMessage, setContactMessage] = useState("");
+
+  function handleContactSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const subject = encodeURIComponent(
+      `Split Bill privacy policy question${contactName.trim() ? ` from ${contactName.trim()}` : ""}`
+    );
+    const body = encodeURIComponent(
+      [
+        contactName.trim() ? `Name: ${contactName.trim()}` : null,
+        contactEmail.trim() ? `Reply email: ${contactEmail.trim()}` : null,
+        "",
+        contactMessage.trim()
+      ]
+        .filter((line): line is string => line !== null)
+        .join("\n")
+    );
+
+    window.location.href = `mailto:miagology-tech@proton.me?subject=${subject}&body=${body}`;
+  }
+
   return (
     <Box
       sx={{
@@ -258,7 +276,7 @@ function PrivacyPolicyPage() {
             <Chip label="Privacy policy" color="primary" sx={{ alignSelf: "flex-start", fontWeight: 700 }} />
             <Typography variant="h1">Split Bill Privacy Policy</Typography>
             <Typography color="text.secondary">
-              Effective date: 2026-06-03 · Developer: Miagology · Email: miagology-tech@proton.me
+              Effective date: 2026-06-03 · Developer: Miagology · Email: available via the contact form below
             </Typography>
             <Typography color="text.secondary">
               Split Bill is designed to work primarily offline, with optional online features for exchange-rate lookups and AI handoff.
@@ -301,9 +319,41 @@ function PrivacyPolicyPage() {
             </Card>
           ))}
 
-          <Button component="a" href="/" variant="contained" sx={{ alignSelf: "flex-start" }}>
-            Back to Split Bill
-          </Button>
+          <Card variant="outlined" sx={{ borderRadius: 2 }}>
+            <CardContent>
+              <Stack component="form" spacing={2} onSubmit={handleContactSubmit}>
+                <Typography variant="h2">Contact Us</Typography>
+                <Typography color="text.secondary">
+                  Use this form to open your email app with a prefilled message. We’ll use the details you enter only to reply.
+                </Typography>
+                <TextField label="Name" value={contactName} onChange={(event) => setContactName(event.target.value)} fullWidth />
+                <TextField
+                  label="Email"
+                  type="email"
+                  value={contactEmail}
+                  onChange={(event) => setContactEmail(event.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Message"
+                  value={contactMessage}
+                  onChange={(event) => setContactMessage(event.target.value)}
+                  multiline
+                  minRows={5}
+                  fullWidth
+                  required
+                />
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                  <Button type="submit" variant="contained" disabled={!contactMessage.trim()}>
+                    Open email app
+                  </Button>
+                  <Button component="a" href="/" variant="outlined" sx={{ alignSelf: "flex-start" }}>
+                    Back to Split Bill
+                  </Button>
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
         </Stack>
       </Box>
     </Box>
