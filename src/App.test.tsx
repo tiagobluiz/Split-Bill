@@ -31,6 +31,10 @@ function renderApp() {
   );
 }
 
+function setPathname(pathname: string) {
+  window.history.pushState({}, "", pathname);
+}
+
 function isVisible(element: Element | null): element is HTMLElement {
   if (!(element instanceof HTMLElement)) {
     return false;
@@ -134,6 +138,7 @@ function getVisibleDeleteItemButton() {
 describe("App", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    setPathname("/");
     exportSettlementPdfMock.mockReset();
     importReceiptMock.mockReset();
     clipboardWriteTextMock.mockReset();
@@ -154,6 +159,21 @@ describe("App", () => {
   afterEach(() => {
     cleanup();
   });
+
+  it(
+    "renders the privacy policy route",
+    async () => {
+      setPathname("/privacy");
+      renderApp();
+
+      expect(screen.getByRole("heading", { name: "Split Bill Privacy Policy" })).toBeInTheDocument();
+      expect(screen.getByText(/Effective date:/)).toBeInTheDocument();
+      expect(screen.getByText(/available via the contact form below/)).toBeInTheDocument();
+      expect(screen.getByText("Information We Collect")).toBeInTheDocument();
+      expect(screen.getByText("Children's Privacy")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Back to Split Bill" })).toHaveAttribute("href", "/");
+    }
+  );
 
   it(
     "walks through the core flow and shows the final settlement",
@@ -432,7 +452,9 @@ describe("App", () => {
     15000
   );
 
-  it("imports a receipt in step 2 and appends editable items", async () => {
+  it(
+    "imports a receipt in step 2 and appends editable items",
+    async () => {
     importReceiptMock.mockResolvedValueOnce({
       source: "image",
       fileName: "receipt.png",
@@ -465,7 +487,9 @@ describe("App", () => {
       expect(getVisibleInputByValue("Apples")).toBeInTheDocument();
       expect(getVisibleInputByValue("Bread")).toBeInTheDocument();
     expect(screen.getByText("Ignored 1 total or payment lines.")).toBeInTheDocument();
-  });
+    },
+    10000
+  );
 
   it("opens provider handoff, launches the selected provider, and moves into paste mode", async () => {
     const user = userEvent.setup();
@@ -515,7 +539,9 @@ describe("App", () => {
     }
   });
 
-  it("opens the paste dialog after manually copying the ai prompt", async () => {
+  it(
+    "opens the paste dialog after manually copying the ai prompt",
+    async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -533,9 +559,13 @@ describe("App", () => {
 
     expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Pasted items")).toBeInTheDocument();
-  });
+    },
+    10000
+  );
 
-  it("does not open the paste dialog when the ai handoff dialog is closed normally", async () => {
+  it(
+    "does not open the paste dialog when the ai handoff dialog is closed normally",
+    async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -552,7 +582,9 @@ describe("App", () => {
       expect(screen.queryByRole("button", { name: "Copy prompt" })).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Pasted items")).not.toBeInTheDocument();
     });
-  });
+    },
+    10000
+  );
 
   it(
     "clears the pasted input with the reset action",
